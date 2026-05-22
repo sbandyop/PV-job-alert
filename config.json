@@ -1,0 +1,4 @@
+{
+  "paused": false,
+  "_instructions": "To pause weekly searches: change false to true. To resume: change back to false. Save the file on GitHub by clicking Commit changes."
+}

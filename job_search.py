@@ -1,173 +1,172 @@
 """
 Weekly PV Job Alert — Soumi Bandyopadhyay
-Searches LinkedIn via Apify, scores with Claude API, emails matches ≥50%
+Free tools only: Adzuna API + keyword scoring + Gmail SMTP
+Pause by editing config.json on GitHub
 """
 
 import os
 import json
-import time
 import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
-# ─── CONFIG ──────────────────────────────────────────────────────────────────
+# ─── SECRETS (set in GitHub → Settings → Secrets) ────────────────────────────
+ADZUNA_APP_ID  = os.environ["ADZUNA_APP_ID"]
+ADZUNA_APP_KEY = os.environ["ADZUNA_APP_KEY"]
+EMAIL_SENDER   = os.environ["EMAIL_SENDER"]    # your Gmail
+EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]  # Gmail App Password
+EMAIL_RECIPIENT = os.environ["EMAIL_RECIPIENT"]
 
-ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-APIFY_API_KEY     = os.environ["APIFY_API_KEY"]
-EMAIL_SENDER      = os.environ["EMAIL_SENDER"]       # your Gmail address
-EMAIL_PASSWORD    = os.environ["EMAIL_PASSWORD"]     # Gmail App Password
-EMAIL_RECIPIENT   = os.environ["EMAIL_RECIPIENT"]    # where to send alerts
+# ─── SEARCH QUERIES ──────────────────────────────────────────────────────────
+QUERIES = [
+    "Projektleiter Photovoltaik",
+    "Projektleiter Solar",
+    "Projektentwickler PV",
+    "Technical Project Manager Solar",
+    "EPC Solar Project Manager",
+    "Owner Engineer Renewable Energy",
+    "Projektleiter Solarpark",
+    "PV Projektmanager",
+]
 
-CV_PROFILE = """
-Role: Technical Project Manager / Owner's Engineer
-Experience: 5 years post-MSc
-PV scope: utility-scale and rooftop PV (26–102 MWp), BESS (up to 250 MW)
-Core skills: EPC tendering & award, grid operator interface (technical clarifications),
-  construction-phase oversight, commissioning acceptance (document review),
-  contractual/commercial management, stakeholder management
-Education: M.Sc. Sustainable Systems Engineering (Photovoltaics),
-  Albert-Ludwigs-Universität Freiburg
-Languages: English (fluent), German (B1, B2 in progress)
-Location: Freiburg, Germany. Target: Basel or Zürich, Switzerland (hybrid preferred).
-  Eligible for Grenzgängerbewilligung G (CH-DE).
-Tools: PVSyst, AutoCAD, MS Office
-
-HARD BLOCKERS — any of these auto-reject the role:
-- Direct line management / Personalverantwortung over staff
-- Physical installation or live electrical work on site
-- French fluency required
-- Swiss electrical trade certificate (EFZ) strictly required
-- Student/retiree role or <20h/month
-- Pure HV grid engineering (not OE/PM oversight)
-"""
-
-# Companies already rejected Soumi — skip automatically
+# ─── REJECTED COMPANIES ──────────────────────────────────────────────────────
 REJECTED_COMPANIES = [
-    "enshift", "gruner", "aventron", "primeo", "solarmarkt",
-    "ewz", "bakerhicks", "agap2"
+    "enshift", "gruner", "aventron", "primeo energie",
+    "solarmarkt", "ewz", "bakerhicks", "agap2"
 ]
 
-SEARCH_URLS = [
-    "https://www.linkedin.com/jobs/search/?keywords=Projektleiter%20Photovoltaik&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Projektleiter%20Solar%20PV&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Projektentwickler%20Solar&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Technical%20Project%20Manager%20Solar&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Owner%20Engineer%20Renewable%20Energy&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=EPC%20Solar%20Project%20Manager&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Projektleiter%20Solarpark&location=Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=PV%20Projektmanager&location=Basel%2C%20Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Solar%20Project%20Manager&location=Zurich%2C%20Switzerland&f_TPR=r604800&f_WT=2",
-    "https://www.linkedin.com/jobs/search/?keywords=Technischer%20Projektleiter%20Erneuerbare%20Energien&location=Switzerland&f_TPR=r604800&f_WT=2",
+# ─── SCORING KEYWORDS ────────────────────────────────────────────────────────
+
+# Each group: (keywords_to_check, points_if_any_match)
+MATCH_SIGNALS = [
+    # Domain — PV/Solar
+    (["photovoltaik", "photovoltaic", "pv-anlage", "solarpark",
+      "solar pv", "solaranlage", "solar energy"], 25),
+    # Function — PM/OE
+    (["projektleiter", "projektmanager", "project manager",
+      "owner's engineer", "epc", "bauherr", "inbetriebnahme",
+      "ausschreibung", "tendering", "commissioning"], 25),
+    # Hybrid / Swiss location
+    (["hybrid", "homeoffice", "remote", "basel", "zürich",
+      "zurich", "bern", "schweiz", "switzerland"], 10),
+    # Seniority match
+    (["5 jahre", "5 years", "senior", "erfahrung", "experience"], 10),
+    # Rooftop PV (also acceptable)
+    (["dachanlage", "rooftop", "gebäude", "commercial pv",
+      "gewerblich", "industriedach"], 10),
 ]
 
-# ─── LINKEDIN SEARCH ─────────────────────────────────────────────────────────
+# Hard blocker keywords — any match caps score at 25 and forces Skip
+HARD_BLOCKERS = [
+    "elektroinstallateur efz",
+    "montage-elektriker",
+    "personalverantwortung",
+    "teamleiter",    # only if combined with staff management
+    "führung von mitarbeitenden",
+    "disziplinarische führung",
+    "französisch zwingend",
+    "french mandatory",
+    "french fluent required",
+    "auf dächern",      # physical rooftop climbing
+    "auf dem dach",
+    "psa",              # fall protection = physical work
+    "dachdecker",
+    "monteur",
+    "10-20 stunden",
+    "studentenjob",
+]
 
-def search_linkedin():
-    print("Starting LinkedIn search via Apify...")
+# Weak signals — if title has these alone with no PV context, skip
+DOMAIN_MISMATCH = [
+    "wasserkraft", "hydro", "wärme", "steam turbine",
+    "quantum", "pharma", "rolling stock", "automation",
+    "buchhaltung", "accountant", "hr ", "informatik",
+    "netzelektriker", "dachmonteur", "solarteur",
+]
 
-    # Start the actor run
-    start_resp = requests.post(
-        "https://api.apify.com/v2/acts/curious_coder~linkedin-jobs-scraper/runs",
-        params={"token": APIFY_API_KEY},
-        json={"urls": SEARCH_URLS, "count": 40, "scrapeCompany": False}
-    )
-    start_resp.raise_for_status()
-    run_id = start_resp.json()["data"]["id"]
-    print(f"Run started: {run_id}")
+# ─── SCORING ENGINE ──────────────────────────────────────────────────────────
 
-    # Poll until finished (max 3 minutes)
-    for _ in range(18):
-        time.sleep(10)
-        status_resp = requests.get(
-            f"https://api.apify.com/v2/acts/curious_coder~linkedin-jobs-scraper/runs/{run_id}",
-            params={"token": APIFY_API_KEY}
-        )
-        status = status_resp.json()["data"]["status"]
-        print(f"  Status: {status}")
-        if status in ("SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"):
-            break
+def score_job(title, company, description):
+    text = (title + " " + description).lower()
 
-    if status != "SUCCEEDED":
-        print(f"Run did not succeed: {status}")
-        return []
+    # Domain mismatch — immediate skip
+    if any(kw in text for kw in DOMAIN_MISMATCH):
+        return 0, "Skip", "Domain mismatch", ""
 
-    # Get dataset
-    dataset_id = status_resp.json()["data"]["defaultDatasetId"]
-    items_resp = requests.get(
-        f"https://api.apify.com/v2/datasets/{dataset_id}/items",
-        params={"token": APIFY_API_KEY, "clean": "true", "limit": 100}
-    )
-    items_resp.raise_for_status()
-    jobs = items_resp.json()
-    print(f"Retrieved {len(jobs)} LinkedIn jobs")
-    return jobs
+    # Hard blockers — cap at 25
+    blocker_hit = next((kw for kw in HARD_BLOCKERS if kw in text), None)
 
-# ─── SCORING ─────────────────────────────────────────────────────────────────
+    score = 0
+    for keywords, points in MATCH_SIGNALS:
+        if any(kw in text for kw in keywords):
+            score += points
 
-def score_job(title, company, location, description):
-    prompt = f"""You are evaluating job fit for this candidate:
+    if blocker_hit:
+        score = min(score, 25)
+        verdict = "Skip"
+        key_gap = f"Hard blocker: {blocker_hit}"
+    elif score >= 50:
+        verdict = "Apply"
+        key_gap = ""
+    else:
+        verdict = "Skip"
+        key_gap = "Insufficient PV/PM signal"
 
-{CV_PROFILE}
+    # Key match summary
+    matched = []
+    if any(kw in text for kw in ["photovoltaik", "photovoltaic", "solar pv", "solarpark"]):
+        matched.append("PV domain")
+    if any(kw in text for kw in ["epc", "ausschreibung", "tendering"]):
+        matched.append("EPC/tendering")
+    if any(kw in text for kw in ["projektleiter", "project manager", "owner"]):
+        matched.append("PM/OE function")
+    if any(kw in text for kw in ["hybrid", "homeoffice"]):
+        matched.append("Hybrid work")
 
-Job:
-Title: {title}
-Company: {company}
-Location: {location}
-Description: {description[:3000]}
+    key_match = ", ".join(matched) if matched else "Partial signal"
 
-Score fit 0–100 across these dimensions:
-- Domain match (utility/rooftop PV = 25pts; other solar = 15pts; unrelated = 0): /25
-- Function match (PM/OE/project delivery = 25pts; asset mgmt = 15pts; field install = 0): /25
-- Language (German B1 ok = 20pts; B2 strictly required = 10pts; French required = 0): /20
-- Seniority (mid-senior 5yr fit = 15pts; too junior/senior = 5pts): /15
-- No hard blockers (none = 15pts; 1 blocker = 7pts; 2+ blockers = 0): /15
+    return score, verdict, key_match, key_gap
 
-Hard blockers that cap total at 30 regardless of other scores:
-- Direct line management / Personalverantwortung
-- Physical installation or live electrical work
-- French fluency required
-- Swiss EFZ trade certificate strictly required
+# ─── ADZUNA SEARCH ───────────────────────────────────────────────────────────
 
-Reply ONLY with valid JSON, no other text:
-{{"score": 72, "verdict": "Apply", "key_match": "PV EPC tendering, OE scope", "key_gap": "German B2 preferred"}}
+def search_adzuna():
+    jobs = []
+    seen = set()
 
-verdict = "Apply" if score >= 50, else "Skip"."""
-
-    resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        },
-        json={
-            "model": "claude-sonnet-4-20250514",
-            "max_tokens": 150,
-            "messages": [{"role": "user", "content": prompt}]
-        }
-    )
-
-    if resp.status_code == 200:
+    for query in QUERIES:
         try:
-            text = resp.json()["content"][0]["text"].strip()
-            # Strip markdown code fences if present
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            return json.loads(text.strip())
+            resp = requests.get(
+                "https://api.adzuna.com/v1/api/jobs/ch/search/1",
+                params={
+                    "app_id": ADZUNA_APP_ID,
+                    "app_key": ADZUNA_APP_KEY,
+                    "what": query,
+                    "results_per_page": 10,
+                    "max_days_old": 7,
+                    "content-type": "application/json",
+                },
+                timeout=15
+            )
+            if resp.status_code == 200:
+                for job in resp.json().get("results", []):
+                    jid = job.get("id", "")
+                    if jid and jid not in seen:
+                        seen.add(jid)
+                        jobs.append(job)
         except Exception as e:
-            print(f"  Score parse error: {e}")
-    return None
+            print(f"  Adzuna error for '{query}': {e}")
+
+    print(f"Retrieved {len(jobs)} jobs from Adzuna")
+    return jobs
 
 # ─── EMAIL ───────────────────────────────────────────────────────────────────
 
 def send_email(matches):
     date_str = datetime.now().strftime("%d %B %Y")
     body = f"Weekly PV Job Alert — {date_str}\n"
-    body += f"Found {len(matches)} role(s) matching your profile (≥50% fit):\n"
+    body += f"{len(matches)} role(s) matched your profile (≥50% fit):\n"
     body += "=" * 60 + "\n\n"
 
     for j in matches:
@@ -176,21 +175,31 @@ def send_email(matches):
         body += f"LOCATION:  {j['location']}\n"
         body += f"FIT:       {j['score']}%\n"
         body += f"MATCH:     {j['key_match']}\n"
-        body += f"GAP:       {j['key_gap']}\n"
+        if j['key_gap']:
+            body += f"GAP:       {j['key_gap']}\n"
         body += f"LINK:      {j['link']}\n"
         body += "-" * 40 + "\n\n"
 
     msg = MIMEMultipart()
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = EMAIL_RECIPIENT
-    msg["Subject"] = f"[PV Job Alert] {len(matches)} Match(es) Found — {date_str}"
+    msg["Subject"] = f"[PV Job Alert] {len(matches)} Match(es) — {date_str}"
     msg.attach(MIMEText(body, "plain"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
         server.send_message(msg)
 
-    print(f"Email sent: {len(matches)} match(es)")
+    print(f"Email sent — {len(matches)} match(es)")
+
+# ─── PAUSE CHECK ─────────────────────────────────────────────────────────────
+
+def is_paused():
+    try:
+        with open("config.json") as f:
+            return json.load(f).get("paused", False)
+    except FileNotFoundError:
+        return False
 
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
@@ -199,54 +208,42 @@ def is_rejected(company):
 
 def main():
     print(f"\n{'='*60}")
-    print(f"PV Job Search — {datetime.now().strftime('%d %B %Y %H:%M')}")
+    print(f"PV Job Alert — {datetime.now().strftime('%d %B %Y %H:%M')}")
     print(f"{'='*60}\n")
 
-    linkedin_jobs = search_linkedin()
+    if is_paused():
+        print("Search is PAUSED. Edit config.json and set paused to false to resume.")
+        return
+
+    raw_jobs = search_adzuna()
     matches = []
-    seen = set()
 
-    for job in linkedin_jobs:
-        title    = job.get("title", "")
-        company  = job.get("companyName", "")
-        location = job.get("location", "")
-        desc     = job.get("descriptionText", "")
-        link     = job.get("link", "")
+    for job in raw_jobs:
+        title   = job.get("title", "")
+        company = job.get("company", {}).get("display_name", "")
+        loc     = job.get("location", {}).get("display_name", "")
+        desc    = job.get("description", "")
+        link    = job.get("redirect_url", "")
 
-        # Skip rejected companies
         if is_rejected(company):
-            print(f"Skipping (rejected company): {company}")
+            print(f"Skipping rejected company: {company}")
             continue
 
-        # Deduplicate
-        key = f"{title}|{company}".lower()
-        if key in seen:
-            continue
-        seen.add(key)
+        score, verdict, key_match, key_gap = score_job(title, company, desc)
+        print(f"{verdict} ({score}%): {title} @ {company}")
 
-        print(f"Scoring: {title} @ {company} [{location}]")
-        result = score_job(title, company, location, desc)
+        if verdict == "Apply":
+            matches.append({
+                "title":     title,
+                "company":   company,
+                "location":  loc,
+                "score":     score,
+                "key_match": key_match,
+                "key_gap":   key_gap,
+                "link":      link,
+            })
 
-        if result:
-            score = result.get("score", 0)
-            print(f"  → {score}% — {result.get('verdict', 'Skip')}")
-            if score >= 50:
-                matches.append({
-                    "title":     title,
-                    "company":   company,
-                    "location":  location,
-                    "score":     score,
-                    "key_match": result.get("key_match", ""),
-                    "key_gap":   result.get("key_gap", ""),
-                    "link":      link
-                })
-        else:
-            print("  → Scoring failed, skipping")
-
-        time.sleep(0.5)  # Rate limit buffer
-
-    print(f"\nTotal matches: {len(matches)}")
-
+    print(f"\nMatches: {len(matches)}")
     if matches:
         send_email(matches)
     else:
