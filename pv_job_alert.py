@@ -42,7 +42,8 @@ QUERIES = [
 
 REJECTED_COMPANIES = [
     "enshift", "gruner", "aventron", "primeo energie",
-    "solarmarkt", "ewz", "bakerhicks", "agap2"
+    "solarmarkt", "ewz", "bakerhicks", "agap2",
+    "younergy", "romande energie",  # ← add these
 ]
 
 # ─── SCORING (existing logic, unchanged for jobs that pass the new filter) ──
