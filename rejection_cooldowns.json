@@ -1,0 +1,102 @@
+[
+  {
+    "company": "iwb",
+    "rejection_date": "2026-01-14",
+    "blocked_until": "2027-01-14",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiterin? erneuerbare energien|projektleiter.* erneuerbare energien",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "SuccessFactors ATS, HR Business Partner Anett Schulze. Human decision confirmed by 'unter Mitbewerbern auswählen' language."
+  },
+  {
+    "company": "enshift",
+    "rejection_date": "2026-03-12",
+    "blocked_until": "2026-09-12",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektmanager.*solar|technische.*projektmanager.*solar|solar.*projektmanager",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Rejected after in-person interview. Reason: German fluency insufficient. Otherwise great fit. Reapply after B2 certification."
+  },
+  {
+    "company": "sonnwende",
+    "rejection_date": "2026-04-16",
+    "blocked_until": "2026-10-16",
+    "rejection_type": "explicit",
+    "block_scope": "company",
+    "role_pattern": null,
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "No vacancy response to Initiativbewerbung. No role comparison made. Talent Pool invite. Small Basel C&I installer — unlikely to appear in utility-scale alert anyway."
+  },
+  {
+    "company": "ckw",
+    "rejection_date": "2026-04-17",
+    "blocked_until": "2027-04-17",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiter.*solar|projektleiterin.*solar|projektleiter.*solartechnik",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Teamtailor ATS. CKW said 'Absagen automatisiert versenden' but this refers to email delivery, not the decision. Human moved application to rejected. Upgraded from 6mo to 12mo per ATS research."
+  },
+  {
+    "company": "younergy",
+    "rejection_date": "2026-04-24",
+    "blocked_until": "2027-04-24",
+    "rejection_type": "explicit",
+    "block_scope": "company",
+    "role_pattern": null,
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Factorial ATS. Small CH company — company-wide block appropriate. SME-scale means recruiter reviewed personally."
+  },
+  {
+    "company": "romande energie",
+    "rejection_date": "2026-04-27",
+    "blocked_until": "2027-04-27",
+    "rejection_type": "explicit",
+    "block_scope": "company",
+    "role_pattern": null,
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "johdisuite.ch ATS. French-language company — language barrier is company-wide, not role-specific."
+  },
+  {
+    "company": "k. schweizer",
+    "rejection_date": "2026-05-04",
+    "blocked_until": "2027-05-04",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektentwickler.*photovoltaik|projektentwicklerin.*photovoltaik|pv.*projektentwickl",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Direct email from Mirjam.Widmer@ksag.ch. Gebäudetechnik company (Burkhalter Gruppe). C&I/rooftop scope only — unlikely to reappear in utility-scale alert."
+  },
+  {
+    "company": "gruner",
+    "rejection_date": "2026-05-04",
+    "blocked_until": "2027-05-04",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiter.*energieanlagen|projektleiterin.*energieanlagen",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Direct from olivia.fringeli@gruner.ch. Explicitly invited reapplication for other vacancies. Role-specific block only."
+  },
+  {
+    "company": "tritec",
+    "rejection_date": "2026-05-11",
+    "blocked_until": "2027-05-11",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiter.*pv|projektleiterin.*pv|projektleiter.*photovoltaik",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Direct from personal@tritec.ch (Clelia Fux). Uses Workday via Naturenergie group. No interview stage reached."
+  },
+  {
+    "company": "primeo energie",
+    "rejection_date": "2026-05-18",
+    "blocked_until": "2027-05-18",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "asset.*development.*manager.*photovoltaik|asset.*development.*manager.*pv",
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Direct from C.Engelbrecht@primeo-energie.ch. Personal sender, role-specific. Other Primeo roles remain eligible."
+  }
+]
