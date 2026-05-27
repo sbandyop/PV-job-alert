@@ -5,16 +5,20 @@ on:
     - cron: '0 7 * * 1'   # Every Monday at 09:00 CEST (07:00 UTC)
   workflow_dispatch:       # Run manually anytime from Actions tab
 
+permissions:
+  contents: write          # required for the state-file commit-back step
+
 jobs:
   job-search:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -23,9 +27,20 @@ jobs:
 
       - name: Run job search
         env:
-          ADZUNA_APP_ID:  ${{ secrets.ADZUNA_APP_ID }}
-          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
-          EMAIL_SENDER:   ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          ADZUNA_APP_ID:   ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY:  ${{ secrets.ADZUNA_APP_KEY }}
+          EMAIL_SENDER:    ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD:  ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
-        run: python job_search.py
+        run: python pv_job_alert.py
+
+      - name: Persist Swiss state file
+        if: always()
+        run: |
+          if [ -f seen_swiss_jobs.json ]; then
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add seen_swiss_jobs.json
+            git diff --cached --quiet || git commit -m "chore: update Swiss seen-jobs state [skip ci]"
+            git push
+          fi
