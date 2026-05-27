@@ -37,12 +37,14 @@ EMAIL_RECIPIENT = os.environ["EMAIL_RECIPIENT"]
 QUERIES = [
     "Projektleiter Photovoltaik",
     "Projektleiter Solar",
-    "Projektentwickler PV",
     "Technical Project Manager Solar",
     "EPC Solar Project Manager",
     "Owner Engineer Renewable Energy",
     "Projektleiter Solarpark",
     "PV Projektmanager",
+    "Solar Projektmanager",
+    "PV Project Manager",
+    "Solar Project Manager",
 ]
 
 # Hardcoded PERMANENT blocks — genuine never-apply decisions (not rejections).
