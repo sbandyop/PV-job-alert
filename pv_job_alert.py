@@ -3,9 +3,13 @@ Weekly PV Job Alert — Soumi Bandyopadhyay
 Free tools only: Adzuna API + employer scrapers + keyword scoring + Gmail SMTP
 
 Pipeline:
-  1. Adzuna search (existing) -> hard filter chain (CH, language, function) -> score
-  2. Swiss employer direct scrape (new) -> hard filter chain
+  1. Adzuna search -> hard filter chain (CH, language, function) -> cooldown -> score
+  2. Swiss employer direct scrape (filter chain applied internally) -> cooldown
   3. Combine -> single email
+
+Blocklists:
+  - REJECTED_COMPANIES (this file): hardcoded permanent blocks
+  - rejection_cooldowns.json: time-based cooldowns from explicit/auto-ATS rejections
 
 Pause by editing config.json on GitHub.
 """
@@ -20,6 +24,7 @@ from datetime import datetime
 
 from job_filters import apply_filter_chain, fetch_jd_body
 from swiss_employers import fetch_swiss_employer_jobs
+from rejection_cooldowns import load_cooldowns, is_blocked, format_expiring_soon
 
 # ─── SECRETS ────────────────────────────────────────────────────────────────
 ADZUNA_APP_ID   = os.environ["ADZUNA_APP_ID"]
@@ -40,13 +45,24 @@ QUERIES = [
     "PV Projektmanager",
 ]
 
-REJECTED_COMPANIES = [
-    "enshift", "gruner", "aventron", "primeo energie",
-    "solarmarkt", "ewz", "bakerhicks", "agap2",
-    "younergy", "romande energie",  # ← add these
+# Hardcoded PERMANENT blocks — genuine never-apply decisions (not rejections).
+# Rejections go in rejection_cooldowns.json with expiry dates.
+#
+# Audit trail — removed from this list 2026-05-27:
+#   ewz          → removed entirely (Talent Pool invite, no rejection)
+#   enshift      → rejection_cooldowns.json, role-specific 6mo (language only)
+#   gruner       → rejection_cooldowns.json, role-specific 12mo
+#   primeo       → rejection_cooldowns.json, role-specific 12mo
+#   solarmarkt   → removed (no evidence of rejection found in Gmail)
+#   aventron     → removed (no evidence of rejection found in Gmail)
+#   bakerhicks   → removed (no evidence of rejection found in Gmail)
+#   agap2        → removed (no evidence of rejection found in Gmail)
+REJECTED_COMPANIES: list[str] = [
+    # Add genuine never-apply companies here (e.g. known bad employers, competitors).
+    # Currently empty — all known rejections are time-based in rejection_cooldowns.json.
 ]
 
-# ─── SCORING (existing logic, unchanged for jobs that pass the new filter) ──
+# ─── SCORING ─────────────────────────────────────────────────────────────────
 MATCH_SIGNALS = [
     (["photovoltaik", "photovoltaic", "pv-anlage", "solarpark",
       "solar pv", "solaranlage", "solar energy"], 25),
@@ -60,10 +76,6 @@ MATCH_SIGNALS = [
       "gewerblich", "industriedach"], 10),
 ]
 
-# Note: tightened — removed "personalverantwortung", "teamleiter",
-# "führung von mitarbeitenden", "disziplinarische führung" because these
-# describe normal senior PM responsibilities you're qualified for.
-# Language and physical-work blockers retained.
 HARD_BLOCKERS = [
     "elektroinstallateur efz",
     "montage-elektriker",
@@ -122,7 +134,6 @@ def score_job(title, company, description):
         matched.append("Hybrid work")
 
     key_match = ", ".join(matched) if matched else "Partial signal"
-
     return score, verdict, key_match, key_gap
 
 
@@ -157,19 +168,11 @@ def search_adzuna():
     return jobs
 
 
-def is_rejected(company):
+def is_rejected_permanent(company):
     return any(r in company.lower() for r in REJECTED_COMPANIES)
 
 
-def process_adzuna(raw_jobs):
-    """
-    For each Adzuna job:
-      1. Reject if blocked company
-      2. Apply hard filter chain (CH, function, language, etc.)
-         — fetches JD body from redirect_url for accurate language detection
-      3. Score with existing scoring engine
-      4. Keep only Apply-verdict jobs scoring >= 50%
-    """
+def process_adzuna(raw_jobs, cooldowns):
     matches = []
     for job in raw_jobs:
         title   = job.get("title", "")
@@ -178,20 +181,20 @@ def process_adzuna(raw_jobs):
         desc    = job.get("description", "")
         link    = job.get("redirect_url", "")
 
-        if is_rejected(company):
-            print(f"  SKIP (blocked company): {company}")
+        if is_rejected_permanent(company):
+            print(f"  SKIP (permanent block): {company}")
             continue
 
-        # Fetch full JD body from the redirect URL for language detection.
-        # If fetch fails, falls back to Adzuna's short description.
+        blocked, entry = is_blocked(company, title, cooldowns)
+        if blocked:
+            print(f"  SKIP (cooldown until {entry['blocked_until']}): {title} @ {company}")
+            continue
+
         jd_body = fetch_jd_body(link) if link else ""
 
         keep, reason = apply_filter_chain(
-            title=title,
-            location=loc,
-            jd_body=jd_body,
-            workmode="",  # Adzuna doesn't reliably expose workmode
-            short_description=desc,
+            title=title, location=loc, jd_body=jd_body,
+            workmode="", short_description=desc,
         )
         if not keep:
             print(f"  FILTER ({reason}): {title}")
@@ -202,21 +205,32 @@ def process_adzuna(raw_jobs):
 
         if verdict == "Apply":
             matches.append({
-                "source":    "adzuna",
-                "title":     title,
-                "company":   company,
-                "location":  loc,
-                "score":     score,
-                "key_match": key_match,
-                "key_gap":   key_gap,
-                "link":      link,
+                "source": "adzuna",
+                "title": title, "company": company, "location": loc,
+                "score": score, "key_match": key_match, "key_gap": key_gap,
+                "link": link,
             })
     return matches
 
 
+def filter_swiss_by_cooldown(swiss_jobs, cooldowns):
+    """Apply cooldown filter to Swiss employer scraper results."""
+    kept = []
+    for j in swiss_jobs:
+        if is_rejected_permanent(j.get("company", "")):
+            print(f"  SWISS SKIP (permanent): {j['company']}")
+            continue
+        blocked, entry = is_blocked(j.get("company", ""), j.get("title", ""), cooldowns)
+        if blocked:
+            print(f"  SWISS SKIP (cooldown until {entry['blocked_until']}): {j['title']}")
+            continue
+        kept.append(j)
+    return kept
+
+
 # ─── EMAIL ───────────────────────────────────────────────────────────────────
 
-def send_email(adzuna_matches, swiss_matches):
+def send_email(adzuna_matches, swiss_matches, expiring_cooldowns):
     total = len(adzuna_matches) + len(swiss_matches)
     date_str = datetime.now().strftime("%d %B %Y")
 
@@ -248,8 +262,16 @@ def send_email(adzuna_matches, swiss_matches):
 
     if not adzuna_matches and not swiss_matches:
         body += "No matches this week.\n"
-        body += "All Adzuna results were filtered out by CH/language/function checks.\n"
-        body += "All Swiss employer direct results were either already-seen or filtered.\n"
+        body += "All results were filtered out by CH/language/function/cooldown checks.\n\n"
+
+    if expiring_cooldowns:
+        body += "\n### COOLDOWN EXPIRING SOON (<30 days)\n\n"
+        body += "These companies will become eligible for re-application:\n\n"
+        for e in expiring_cooldowns:
+            scope_note = "company-wide" if e["block_scope"] == "company" else "role-specific"
+            body += f"  • {e['company']:25s} expires {e['blocked_until']} "
+            body += f"({e['days_remaining']} days, {scope_note}, {e['rejection_type']})\n"
+        body += "\n"
 
     msg = MIMEMultipart()
     msg["From"]    = EMAIL_SENDER
@@ -260,7 +282,6 @@ def send_email(adzuna_matches, swiss_matches):
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
         server.send_message(msg)
-
     print(f"Email sent — {total} match(es)")
 
 
@@ -282,31 +303,35 @@ def main():
     print(f"{'='*60}\n")
 
     if is_paused():
-        print("Search is PAUSED. Edit config.json and set paused to false to resume.")
+        print("Search is PAUSED. Edit config.json to resume.")
         return
 
-    # 1. Adzuna pipeline (with hard filter chain applied)
-    print("\n--- ADZUNA PIPELINE ---")
-    raw_jobs = search_adzuna()
-    adzuna_matches = process_adzuna(raw_jobs)
+    cooldowns = load_cooldowns("rejection_cooldowns.json")
+    print(f"Loaded {len(cooldowns)} active cooldown(s)\n")
 
-    # 2. Swiss employer direct scrape (isolated — won't break Adzuna if it fails)
+    print("--- ADZUNA PIPELINE ---")
+    raw_jobs = search_adzuna()
+    adzuna_matches = process_adzuna(raw_jobs, cooldowns)
+
     print("\n--- SWISS EMPLOYER DIRECT SCRAPE ---")
     try:
-        swiss_matches = fetch_swiss_employer_jobs(state_path="seen_swiss_jobs.json")
+        swiss_raw = fetch_swiss_employer_jobs(state_path="seen_swiss_jobs.json")
+        swiss_matches = filter_swiss_by_cooldown(swiss_raw, cooldowns)
     except Exception as e:
         print(f"[WARN] Swiss scrape failed: {e}")
         swiss_matches = []
 
+    expiring = format_expiring_soon(cooldowns, days=30)
+
     print(f"\n--- SUMMARY ---")
     print(f"Adzuna matches: {len(adzuna_matches)}")
     print(f"Swiss direct matches: {len(swiss_matches)}")
+    print(f"Cooldowns expiring soon: {len(expiring)}")
 
-    # 3. Email if there's anything to send
-    if adzuna_matches or swiss_matches:
-        send_email(adzuna_matches, swiss_matches)
+    if adzuna_matches or swiss_matches or expiring:
+        send_email(adzuna_matches, swiss_matches, expiring)
     else:
-        print("No matches — no email sent.")
+        print("No matches and no expiring cooldowns — no email sent.")
 
 
 if __name__ == "__main__":
