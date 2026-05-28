@@ -156,11 +156,37 @@ def scrape_susi() -> list[dict]:
     return out
 
 
+def scrape_edisun() -> list[dict]:
+    """Edisun Power — static HTML careers page."""
+    try:
+        html = _fetch("https://www.edisunpower.com/de/karriere")
+    except Exception:
+        try:
+            html = _fetch("https://www.edisunpower.com/en/career")
+        except Exception:
+            return []
+    out: list[dict] = []
+    for href, title in re.findall(
+        r'<a[^>]+href="([^"]*(?:karriere|stelle|job|career)[^"]*)"[^>]*>([^<]{5,})</a>',
+        html, re.I
+    ):
+        title = _strip_tags(title).strip()
+        if not title or len(title) < 4:
+            continue
+        url = href if href.startswith("http") else "https://www.edisunpower.com" + href
+        out.append({
+            "company": "Edisun Power", "title": title, "url": url,
+            "location": "Zürich", "workmode": "",
+        })
+    return out
+
+
 SCRAPERS: list[tuple[str, Callable[[], list[dict]]]] = [
     ("Axpo", scrape_axpo),
     ("Alpiq", scrape_alpiq),
     ("Groupe-E", scrape_groupe_e),
     ("SUSI Partners", scrape_susi),
+    ("Edisun Power", scrape_edisun),
 ]
 
 
@@ -285,3 +311,4 @@ if __name__ == "__main__":
         loc = f" [{j['location']}]" if j["location"] else ""
         print(f"  [{j['company']}]{loc} {j['title']}")
         print(f"    {j['url']}\n")
+
