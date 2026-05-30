@@ -2,7 +2,8 @@ name: Weekly PV Job Alert
 
 on:
   schedule:
-    - cron: '0 7 * * 1'   # Every Monday at 09:00 CEST (07:00 UTC)
+    - cron: '0 10 * * 2'   # Tuesday ~12:00 Swiss time — catches the Tuesday posting peak
+    - cron: '0 7 * * 3'    # Wednesday ~09:00 Swiss time — sweeps late-Tuesday/overnight posts
   workflow_dispatch:       # Run manually anytime from Actions tab
 
 permissions:
