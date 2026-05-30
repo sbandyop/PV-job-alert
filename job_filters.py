@@ -32,7 +32,11 @@ KEYWORDS_FUNCTION = [
     "responsable de projets", "owner's engineer", "owner engineer",
     "technical project", "technischer projektleiter",
     "procurement", "beschaffung", "tender", "tendering", "appel d'offres",
-    "buyer", "einkauf", "einkäufer", "achats", "acheteur",
+    "buyer", "einkauf", "einkäufer", "achats", "acheteur", "bauherrenvertretung", "bauherrenberatung", "bauherrenvertreter",
+    "eigentümervertretung", "eigentumervertretung",
+    "technische due diligence", "technical due diligence",
+    "gesamtprojektleitung", "gesamtprojektleiter",
+    "inbetriebnahme",  # commissioning-lead roles
 ]
 
 TECH_REJECT = [
