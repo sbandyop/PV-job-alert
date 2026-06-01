@@ -35,13 +35,13 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
         run: python pv_job_alert.py
 
-      - name: Persist Swiss state file
+      - name: Persist state files
         if: always()
         run: |
-          if [ -f seen_swiss_jobs.json ]; then
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git add seen_swiss_jobs.json
-            git diff --cached --quiet || git commit -m "chore: update Swiss seen-jobs state [skip ci]"
-            git push
-          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen_swiss_jobs.json seen_adzuna_jobs.json 2>/dev/null || true
+          git diff --cached --quiet && echo "No state changes to commit" && exit 0
+          git commit -m "chore: update seen-jobs state [skip ci]"
+          git pull --rebase origin "$(git rev-parse --abbrev-ref HEAD)" || true
+          git push || { echo "PUSH FAILED — duplicates may recur"; exit 1; }
