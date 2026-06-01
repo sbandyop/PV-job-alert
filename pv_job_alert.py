@@ -221,7 +221,7 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
         score, verdict, key_match, key_gap = score_job(title, company, desc)
         print(f"  {verdict} ({score}%): {title} @ {company}")
 
-      if jid:
+        if jid:
             seen_ids.add(jid)
 
         if verdict == "Apply":
