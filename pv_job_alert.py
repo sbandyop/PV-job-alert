@@ -32,7 +32,19 @@ ADZUNA_APP_KEY  = os.environ["ADZUNA_APP_KEY"]
 EMAIL_SENDER    = os.environ["EMAIL_SENDER"]
 EMAIL_PASSWORD  = os.environ["EMAIL_PASSWORD"]
 EMAIL_RECIPIENT = os.environ["EMAIL_RECIPIENT"]
+# ─── ADZUNA SEEN-JOBS MEMORY ─────────────────────────────────────────────────
+SEEN_ADZUNA_PATH = "seen_adzuna_jobs.json"
 
+def load_seen_adzuna(path=SEEN_ADZUNA_PATH):
+    try:
+        with open(path) as f:
+            return set(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+def save_seen_adzuna(seen, path=SEEN_ADZUNA_PATH):
+    with open(path, "w") as f:
+        json.dump(sorted(seen), f, indent=2)
 # ─── SEARCH QUERIES ──────────────────────────────────────────────────────────
 QUERIES = [
     "Projektleiter Photovoltaik",
@@ -174,9 +186,13 @@ def is_rejected_permanent(company):
     return any(r in company.lower() for r in REJECTED_COMPANIES)
 
 
-def process_adzuna(raw_jobs, cooldowns):
+def process_adzuna(raw_jobs, cooldowns, seen_ids):
     matches = []
     for job in raw_jobs:
+        jid = job.get("id", "")
+        if jid and jid in seen_ids:
+            print(f"  SKIP (already seen): {job.get('title','')}")
+            continue
         title   = job.get("title", "")
         company = job.get("company", {}).get("display_name", "")
         loc     = job.get("location", {}).get("display_name", "")
@@ -204,6 +220,9 @@ def process_adzuna(raw_jobs, cooldowns):
 
         score, verdict, key_match, key_gap = score_job(title, company, desc)
         print(f"  {verdict} ({score}%): {title} @ {company}")
+
+      if jid:
+            seen_ids.add(jid)
 
         if verdict == "Apply":
             matches.append({
@@ -312,8 +331,10 @@ def main():
     print(f"Loaded {len(cooldowns)} active cooldown(s)\n")
 
     print("--- ADZUNA PIPELINE ---")
+    seen_adzuna = load_seen_adzuna()
     raw_jobs = search_adzuna()
-    adzuna_matches = process_adzuna(raw_jobs, cooldowns)
+    adzuna_matches = process_adzuna(raw_jobs, cooldowns, seen_adzuna)
+    save_seen_adzuna(seen_adzuna)
 
     print("\n--- SWISS EMPLOYER DIRECT SCRAPE ---")
     try:
