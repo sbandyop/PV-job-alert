@@ -63,6 +63,58 @@ FUNCTION_REJECT_TITLE = [
     "chef de chantier", "bauleiter elektro", "bauleiter installation",
 ]
 
+# --- Trade-track qualification required, found in JD BODY (not title) ---
+# These gate the role behind the Swiss electrical vocational certificate.
+# Scanned in the body because titles are clean PM titles ("Projektleiter PV").
+# NOTE: matched as independent tokens, NOT the old exact phrase "elektroinstallateur efz".
+REQUIREMENT_REJECT_BODY = [
+    r"\befz\b",
+    r"elektroinstallateur",
+    r"elektroplaner",
+    r"eidg\.?\s*fachausweis",
+    r"eidgenössischer fachausweis",
+    r"sicherheitsexperte",
+    r"sicherheitsberater",
+    r"abgeschlossene\s+(grund)?ausbildung\s+(als\s+|im\s+)?elektro",
+]
+
+# --- Bauleitung as a core listed duty (site-construction management) ---
+BAULEITUNG_REJECT_BODY = [
+    r"\bbauleitung\b",
+    r"\bbauleiter\b",
+    r"baustellen(leitung|verantwortung)",
+]
+
+# --- Sales/acquisition as primary function (segment-lead/Vertrieb roles) ---
+SALES_REJECT_BODY = [
+    r"auftragsakquise",
+    r"kundenakquise",
+    r"\bakquise\b",
+    r"neukundengewinnung",
+    r"vertriebsverantwortung",
+]
+
+# --- Agency-shell signals: staffing reposts for undisclosed end clients ---
+AGENCY_POSTER_NAMES = [
+    "dasteam", "das team", "addexpert", "excellent go4", "excellent1",
+    "zürcher consulting", "zuercher consulting",
+]
+AGENCY_SHELL_PHRASES = [
+    r"für unsere[nr]?\s+kund",
+    r"\bunser kunde\b",
+    r"personalverleih", r"personalvermittlung", r"verleih von personal",
+]
+
+# --- Hard target-location restriction (Basel / Zürich only) ---
+# Your SWISS_LOCATIONS accepts all of CH; this enforces your stated hard targets.
+TARGET_LOCATION_REJECT = [
+    "zofingen", "st. gallen", "st.gallen", "sankt gallen", "hünenberg",
+    "chur", "luzern", "lucerne", "bern", "biel", "olten", "solothurn",
+    "schaffhausen", "frauenfeld", "thun", "zug",
+    "genève", "geneve", "geneva", "genf", "lausanne", "fribourg",
+    "neuchâtel", "sion", "lugano", "locarno", "bellinzona",
+]
+
 JUNIOR_REJECT = [
     "intern", "internship", "praktikant", "praktikum", "praktikantin",
     "trainee", "apprentice", "apprenti", "apprentie", "lehrling",
@@ -294,6 +346,46 @@ def fetch_jd_body(url: str) -> str:
     return ""
 
 
+def _matches_any(patterns, text):
+    return any(re.search(p, text) for p in patterns)
+
+
+def passes_requirements_body(jd_body: str) -> tuple[bool, str]:
+    """Scan JD body for trade-track gate / Bauleitung / sales-primary.
+    Fails OPEN on empty body (no body fetched -> let scoring decide)."""
+    body = (jd_body or "").lower()
+    if not body:
+        return True, ""
+    if _matches_any(REQUIREMENT_REJECT_BODY, body):
+        return False, "EFZ / eidg. Fachausweis Elektro required (trade-track gate)"
+    if _matches_any(BAULEITUNG_REJECT_BODY, body):
+        return False, "Bauleitung as core duty"
+    if _matches_any(SALES_REJECT_BODY, body):
+        return False, "sales/acquisition primary function"
+    return True, ""
+
+
+def passes_agency_shell(company: str, jd_body: str) -> tuple[bool, str]:
+    """Reject staffing-agency reposts for undisclosed end clients."""
+    comp = (company or "").lower()
+    body = (jd_body or "").lower()
+    if any(name in comp for name in AGENCY_POSTER_NAMES):
+        return False, f"staffing agency poster ({comp})"
+    if body and _matches_any(AGENCY_SHELL_PHRASES, body):
+        return False, "agency shell: undisclosed end client"
+    return True, ""
+
+
+def passes_target_location(location: str) -> tuple[bool, str]:
+    """Hard-restrict to Basel/Zürich targets; reject other CH cantons/towns."""
+    loc = (location or "").lower()
+    if not loc:
+        return True, ""
+    if any(bad in loc for bad in TARGET_LOCATION_REJECT):
+        return False, f"outside target Basel/Zürich ({location})"
+    return True, ""
+
+
 # ============================================================================
 # Main entry: apply_filter_chain
 # ============================================================================
@@ -305,6 +397,7 @@ def apply_filter_chain(
     workmode: str = "",
     short_description: str = "",
     require_pm_keyword: bool = False,
+    company: str = "",
 ) -> tuple[bool, str]:
     """Apply the full filter chain to a single job.
 
@@ -323,6 +416,16 @@ def apply_filter_chain(
     """
     if not is_swiss_location(location):
         return False, "not Swiss location"
+
+    # Hard target-location restriction (Basel/Zürich only)
+    ok, reason = passes_target_location(location)
+    if not ok:
+        return False, reason
+
+    # Agency-shell reject (uses company name + body phrasing)
+    ok, reason = passes_agency_shell(company, jd_body)
+    if not ok:
+        return False, reason
 
     if require_pm_keyword:
         t = _normalize_title(title).lower()
@@ -348,6 +451,11 @@ def apply_filter_chain(
     # Language filter — use full JD if available, fall back to short description
     body_for_lang = jd_body or short_description
     ok, reason = passes_language_filter(body_for_lang)
+    if not ok:
+        return False, reason
+
+    # Requirements-body filter — EFZ/Fachausweis gate, Bauleitung, sales-primary
+    ok, reason = passes_requirements_body(jd_body)
     if not ok:
         return False, reason
 

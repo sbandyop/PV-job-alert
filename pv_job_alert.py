@@ -212,7 +212,7 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
 
         keep, reason = apply_filter_chain(
             title=title, location=loc, jd_body=jd_body,
-            workmode="", short_description=desc,
+            workmode="", short_description=desc, company=company,
         )
         if not keep:
             print(f"  FILTER ({reason}): {title}")
