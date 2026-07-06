@@ -274,6 +274,8 @@ def fetch_swiss_employer_jobs(state_path: str = "seen_swiss_jobs.json") -> list[
             log.warning("  JD fetch failed for %s: %s", j["title"], e)
             jd_body = ""
         j["jd_body"] = jd_body
+        if not jd_body:
+            log.warning("  EMPTY BODY (extraction failed): %s | %s", j["title"], j["url"])
 
         keep, reason = apply_filter_chain(
             title=j["title"],
@@ -281,6 +283,7 @@ def fetch_swiss_employer_jobs(state_path: str = "seen_swiss_jobs.json") -> list[
             jd_body=jd_body,
             workmode=j.get("workmode", ""),
             require_pm_keyword=True,  # unfiltered employer scrape — need PM gate
+            require_body=True,  # employer pages must yield a body; generic titles fail closed
         )
         if not keep:
             log.info("  REJECT %s: %s", j["title"], reason)

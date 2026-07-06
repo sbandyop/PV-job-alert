@@ -53,6 +53,16 @@ TECH_REJECT = [
 # "Projektleiter Windenergie" -> reject. "Projektleiter Solar & Wind" -> keep
 # (PV token present). Decision 2026-07-06.
 WIND_TOKENS = ["wind", "windkraft", "windenergie", "éolien", "eolien"]
+# --- Nuclear: Swiss postings rarely say "Kernkraft" in the title. Reject on
+# title OR body context, unless the title carries a PV/BESS token. ---
+NUCLEAR_TOKENS = [
+    "nuclear", "nuklear", "kernkraft", "kernenergie", "kernanlage",
+    "nucléaire", "nucleaire", "atomkraft", "\bkkw\b", "\bakw\b",
+    "reaktor", "reactor", "brennelement", "brennstab",
+    "rückbau", "rueckbau", "stilllegung",  # decommissioning
+    "leibstadt", "beznau", "gösgen", "goesgen", "mühleberg", "muehleberg",
+]
+
 PV_TOKENS = [
     "pv", "photovolta", "solar", "bess", "batterie", "battery",
     "speicher", "storage", "energiespeicher",
@@ -274,6 +284,35 @@ def passes_tech_focus_title(title: str) -> tuple[bool, str]:
     # Hybrid portfolios (Solar & Wind, PV/Wind/Speicher) are kept.
     if any(w in t for w in WIND_TOKENS) and not any(p in t for p in PV_TOKENS):
         return False, "wind-only role (no PV/BESS in title)"
+    # Nuclear in title (PV token overrides — e.g. "PV auf KKW-Areal" edge case)
+    if _nuclear_hit(t) and not any(p in t for p in PV_TOKENS):
+        return False, "nuclear role (title)"
+    return True, ""
+
+
+def _nuclear_hit(text: str) -> bool:
+    for tok in NUCLEAR_TOKENS:
+        if tok.startswith("\\b"):
+            if re.search(tok, text):
+                return True
+        elif tok in text:
+            return True
+    return False
+
+
+def passes_tech_focus_body(title: str, jd_body: str, short_description: str = "") -> tuple[bool, str]:
+    """Nuclear roles hide behind generic titles ("Projektleiter Grossprojekte").
+    If the title has no PV/BESS token, scan body + short description for
+    nuclear context. A PV token in the title always keeps (employer boilerplate
+    mentioning the nuclear fleet must not kill PV roles at Axpo/Alpiq)."""
+    t = _normalize_title(title).lower()
+    if any(p in t for p in PV_TOKENS):
+        return True, ""
+    body = ((jd_body or "") + " " + (short_description or "")).lower()
+    if not body.strip():
+        return True, ""
+    if _nuclear_hit(body):
+        return False, "nuclear role (JD body context, no PV in title)"
     return True, ""
 
 
@@ -342,25 +381,68 @@ def _strip_tags(s: str) -> str:
     return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", s))).strip()
 
 
+def _http_get(url: str) -> str:
+    """GET with one retry. Returns raw HTML or empty string."""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": UA,
+        "Accept-Language": "en;q=0.9, de;q=0.8, fr;q=0.7",
+    })
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return r.read().decode("utf-8", errors="replace")
+        except Exception:
+            if attempt == 2:
+                return ""
+    return ""
+
+
 def fetch_jd_body(url: str) -> str:
-    """Try to fetch and extract job description body from a URL.
-    Returns empty string on any failure (caller treats empty as ambiguous = keep).
+    """Fetch and extract job description body from a URL.
+    Extraction order (most reliable first):
+      1. schema.org JobPosting JSON-LD "description" (most job portals embed this,
+         including JS-rendered ones — the JSON-LD is server-side)
+      2. Known description-container patterns
+      3. og:description / meta description (better than nothing for tech-focus scan)
+      4. Whole-page text fallback if substantial
+    Returns "" only when nothing usable was extracted; callers should LOG that.
     """
     if not url:
         return ""
-    try:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": UA,
-            "Accept-Language": "en;q=0.9, de;q=0.8, fr;q=0.7",
-        })
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            html = r.read().decode("utf-8", errors="replace")
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, Exception):
+    html = _http_get(url)
+    if not html:
         return ""
 
-    html = re.sub(r'<script.*?</script>', ' ', html, flags=re.S | re.I)
-    html = re.sub(r'<style.*?</style>', ' ', html, flags=re.S | re.I)
+    # 1) JSON-LD JobPosting — search BEFORE stripping <script> tags
+    for m in re.finditer(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html, re.S | re.I,
+    ):
+        raw = m.group(1).strip()
+        try:
+            import json as _json
+            data = _json.loads(raw)
+        except Exception:
+            continue
+        objs = data if isinstance(data, list) else [data]
+        for obj in objs:
+            if not isinstance(obj, dict):
+                continue
+            graph = obj.get("@graph")
+            if isinstance(graph, list):
+                objs.extend(o for o in graph if isinstance(o, dict))
+                continue
+            if obj.get("@type") in ("JobPosting", ["JobPosting"]):
+                desc = obj.get("description", "")
+                if desc:
+                    body = _strip_tags(desc)
+                    if len(body) > 80:
+                        return body
 
+    stripped = re.sub(r'<script.*?</script>', ' ', html, flags=re.S | re.I)
+    stripped = re.sub(r'<style.*?</style>', ' ', stripped, flags=re.S | re.I)
+
+    # 2) Known container patterns
     patterns = [
         r'<span[^>]*class="[^"]*jobdescription[^"]*"[^>]*>(.*?)</span>',
         r'<div[^>]*class="[^"]*jobdescription[^"]*"[^>]*>(.*?)</div>',
@@ -370,12 +452,26 @@ def fetch_jd_body(url: str) -> str:
         r'<main[^>]*>(.*?)</main>',
     ]
     for pat in patterns:
-        m = re.search(pat, html, re.S)
+        m = re.search(pat, stripped, re.S)
         if m:
             body = _strip_tags(m.group(1))
             if len(body) > 200:
                 return body
-    return ""
+
+    # 3) Meta descriptions — short, but enough for token-based tech-focus scan
+    for meta_pat in [
+        r'<meta[^>]*property=["\']og:description["\'][^>]*content=["\'](.*?)["\']',
+        r'<meta[^>]*name=["\']description["\'][^>]*content=["\'](.*?)["\']',
+    ]:
+        m = re.search(meta_pat, html, re.S | re.I)
+        if m:
+            body = _strip_tags(m.group(1))
+            if len(body) > 80:
+                return body
+
+    # 4) Whole-page fallback
+    body = _strip_tags(stripped)
+    return body if len(body) > 500 else ""
 
 
 def _matches_any(patterns, text):
@@ -430,6 +526,7 @@ def apply_filter_chain(
     short_description: str = "",
     require_pm_keyword: bool = False,
     company: str = "",
+    require_body: bool = False,
 ) -> tuple[bool, str]:
     """Apply the full filter chain to a single job.
 
@@ -475,6 +572,18 @@ def apply_filter_chain(
     ok, reason = passes_tech_focus_title(title)
     if not ok:
         return False, reason
+
+    ok, reason = passes_tech_focus_body(title, jd_body, short_description)
+    if not ok:
+        return False, reason
+
+    # Strict mode: generic title (no PV/BESS token) with NO body text at all
+    # cannot be tech-verified — reject instead of failing open. Titles carrying
+    # a PV token stay exempt: they are self-identifying.
+    if require_body and not (jd_body or short_description):
+        t = _normalize_title(title).lower()
+        if not any(p in t for p in PV_TOKENS):
+            return False, "JD body unretrievable and title not self-identifying (strict)"
 
     ok, reason = passes_workmode(workmode, location)
     if not ok:
