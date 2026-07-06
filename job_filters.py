@@ -57,11 +57,13 @@ WIND_TOKENS = ["wind", "windkraft", "windenergie", "éolien", "eolien"]
 # title OR body context, unless the title carries a PV/BESS token. ---
 NUCLEAR_TOKENS = [
     "nuclear", "nuklear", "kernkraft", "kernenergie", "kernanlage",
-    "nucléaire", "nucleaire", "atomkraft", "\bkkw\b", "\bakw\b",
+    "nucléaire", "nucleaire", "atomkraft",
     "reaktor", "reactor", "brennelement", "brennstab",
     "rückbau", "rueckbau", "stilllegung",  # decommissioning
     "leibstadt", "beznau", "gösgen", "goesgen", "mühleberg", "muehleberg",
 ]
+# Short acronyms need word boundaries (substring would hit e.g. "akkwirtschaft")
+NUCLEAR_TOKENS_RE = [r"\bkkw\b", r"\bakw\b"]
 
 PV_TOKENS = [
     "pv", "photovolta", "solar", "bess", "batterie", "battery",
@@ -232,7 +234,11 @@ def is_swiss_location(location: str) -> bool:
     loc = location.lower().strip()
     if loc in SWISS_LOCATIONS:
         return True
-    return any(ch in loc for ch in SWISS_LOCATIONS)
+    # Word-boundary match, not substring: prevents "wil"->"Wilhelmshaven",
+    # "zug"->"Zugspitze"-class false positives while keeping "basel-stadt",
+    # "greater zurich area", "kanton aargau" matches.
+    return any(re.search(rf"(?<![a-zà-ÿ]){re.escape(ch)}(?![a-zà-ÿ])", loc)
+               for ch in SWISS_LOCATIONS)
 
 
 def is_commute_location(location: str) -> bool:
@@ -291,13 +297,9 @@ def passes_tech_focus_title(title: str) -> tuple[bool, str]:
 
 
 def _nuclear_hit(text: str) -> bool:
-    for tok in NUCLEAR_TOKENS:
-        if tok.startswith("\\b"):
-            if re.search(tok, text):
-                return True
-        elif tok in text:
-            return True
-    return False
+    if any(tok in text for tok in NUCLEAR_TOKENS):
+        return True
+    return any(re.search(p, text) for p in NUCLEAR_TOKENS_RE)
 
 
 def passes_tech_focus_body(title: str, jd_body: str, short_description: str = "") -> tuple[bool, str]:
@@ -536,6 +538,10 @@ def apply_filter_chain(
         jd_body: full JD text (from fetch_jd_body), empty string if unavailable
         workmode: 'hybrid'/'remote'/'onsite'/'' if unknown
         short_description: Adzuna's short description (used as JD fallback)
+        require_body: if True, a job whose title has no PV/BESS token AND whose
+            jd_body and short_description are both empty is rejected (fail-closed).
+            Use True for employer-page scrapes; False for Adzuna (always has a
+            short description).
         require_pm_keyword: if True, title MUST contain a PM/procurement keyword.
             Use True for unfiltered employer scrapes (Swiss employer module).
             Use False for Adzuna where the API query already filtered by keyword.
