@@ -42,12 +42,20 @@ KEYWORDS_FUNCTION = [
 TECH_REJECT = [
     "hydro", "wasserkraft", "hydroélectri", "hydropower", "hydraulique",
     "pumped storage",
-    "wind", "windkraft", "éolien", "eolien",
     "nuclear", "kernkraft", "nucléaire",
     "gas-fired", "gas turbine", "lng", "lpg",
     "thermal", "thermoélectri", "kohle", "coal",
     "hvac", "cvc", "chauffage", "klima", "klimat", "heating",
     "sanitär", "sanitaire",
+]
+
+# --- Wind: reject wind-ONLY titles; keep PV / PV+BESS hybrid portfolios ---
+# "Projektleiter Windenergie" -> reject. "Projektleiter Solar & Wind" -> keep
+# (PV token present). Decision 2026-07-06.
+WIND_TOKENS = ["wind", "windkraft", "windenergie", "éolien", "eolien"]
+PV_TOKENS = [
+    "pv", "photovolta", "solar", "bess", "batterie", "battery",
+    "speicher", "storage", "energiespeicher",
 ]
 
 FUNCTION_REJECT_TITLE = [
@@ -79,9 +87,13 @@ REQUIREMENT_REJECT_BODY = [
 ]
 
 # --- Bauleitung as a core listed duty (site-construction management) ---
+# Matches only ownership/execution phrasings. Mere mention (e.g. owner-side
+# "Koordination der Bauleitung" / "Schnittstelle zur Bauleitung") must NOT
+# reject — that phrasing describes OE work, not a Bauleiter role.
 BAULEITUNG_REJECT_BODY = [
-    r"\bbauleitung\b",
-    r"\bbauleiter\b",
+    r"(übernahme|übernehmen|verantwortlich für|verantwortung für|führung|leitung)\s+(der|die|einer)?\s*bauleitung",
+    r"\bals bauleiter(in)?\b",
+    r"\bbauleitung vor ort\b",
     r"baustellen(leitung|verantwortung)",
 ]
 
@@ -105,14 +117,22 @@ AGENCY_SHELL_PHRASES = [
     r"personalverleih", r"personalvermittlung", r"verleih von personal",
 ]
 
-# --- Hard target-location restriction (Basel / Zürich only) ---
-# Your SWISS_LOCATIONS accepts all of CH; this enforces your stated hard targets.
+# --- Target-region restriction: German-speaking Switzerland (Deutschschweiz) ---
+# Standing default per 2026-07-06 decision: keep all Deutschschweiz locations;
+# reject Romandie (FR) and Ticino (IT) only. Onsite-commutability is enforced
+# separately by passes_workmode (Basel/Aargau/Zürich commute zone) — a Luzern
+# onsite role still fails workmode; a Luzern hybrid role now passes.
+# Biel/Bienne is bilingual and deliberately NOT rejected.
 TARGET_LOCATION_REJECT = [
-    "zofingen", "st. gallen", "st.gallen", "sankt gallen", "hünenberg",
-    "chur", "luzern", "lucerne", "bern", "biel", "olten", "solothurn",
-    "schaffhausen", "frauenfeld", "thun", "zug",
+    # Romandie
     "genève", "geneve", "geneva", "genf", "lausanne", "fribourg",
-    "neuchâtel", "sion", "lugano", "locarno", "bellinzona",
+    "neuchâtel", "neuchatel", "neuenburg", "sion", "sitten",
+    "martigny", "monthey", "yverdon", "delémont", "delemont",
+    "morges", "vevey", "montreux", "nyon", "renens",
+    "granges-paccot", "boudry", "guin", "boudevilliers", "epagny",
+    "payerne", "sâles", "château-d'oex",
+    # Ticino
+    "lugano", "locarno", "bellinzona", "mendrisio",
 ]
 
 JUNIOR_REJECT = [
@@ -138,6 +158,14 @@ SWISS_LOCATIONS = {
     "château-d'oex", "château",
     "lugano", "locarno", "mendrisio",
     "switzerland", "schweiz", "suisse", "svizzera",
+    # Commute-zone towns (were missing -> failed "not Swiss location" before
+    # workmode could ever evaluate them) + common Deutschschweiz towns/cantons
+    "rheinfelden", "frick", "brugg", "windisch",
+    "zofingen", "egerkingen", "hünenberg", "huenenberg", "wettingen",
+    "dietikon", "spreitenbach", "pratteln", "muttenz", "münchenstein",
+    "liestal", "allschwil", "reinach", "dübendorf", "duebendorf",
+    "opfikon", "regensdorf", "schlieren", "uster", "wil",
+    "aargau", "basel-landschaft", "basel-stadt", "baselland",
 }
 
 COMMUTE_LOCATIONS = {
@@ -242,6 +270,10 @@ def passes_tech_focus_title(title: str) -> tuple[bool, str]:
     for bad in TECH_REJECT:
         if bad in t:
             return False, f"non-PV/BESS tech in title: '{bad}'"
+    # Wind-only rule: wind token present AND no PV/BESS token -> reject.
+    # Hybrid portfolios (Solar & Wind, PV/Wind/Speicher) are kept.
+    if any(w in t for w in WIND_TOKENS) and not any(p in t for p in PV_TOKENS):
+        return False, "wind-only role (no PV/BESS in title)"
     return True, ""
 
 
@@ -377,12 +409,12 @@ def passes_agency_shell(company: str, jd_body: str) -> tuple[bool, str]:
 
 
 def passes_target_location(location: str) -> tuple[bool, str]:
-    """Hard-restrict to Basel/Zürich targets; reject other CH cantons/towns."""
+    """Restrict to German-speaking Switzerland; reject Romandie/Ticino locations."""
     loc = (location or "").lower()
     if not loc:
         return True, ""
     if any(bad in loc for bad in TARGET_LOCATION_REJECT):
-        return False, f"outside target Basel/Zürich ({location})"
+        return False, f"outside Deutschschweiz target region ({location})"
     return True, ""
 
 
@@ -417,7 +449,7 @@ def apply_filter_chain(
     if not is_swiss_location(location):
         return False, "not Swiss location"
 
-    # Hard target-location restriction (Basel/Zürich only)
+    # Target-region restriction (Deutschschweiz; Romandie/Ticino rejected)
     ok, reason = passes_target_location(location)
     if not ok:
         return False, reason
