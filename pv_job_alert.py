@@ -46,6 +46,8 @@ def save_seen_adzuna(seen, path=SEEN_ADZUNA_PATH):
     with open(path, "w") as f:
         json.dump(sorted(seen), f, indent=2)
 # ─── SEARCH QUERIES ──────────────────────────────────────────────────────────
+# 2026-07-17 sync with criteria doc v6: added owner-side/TDD/tender terms —
+# the segment where the profile converts best.
 QUERIES = [
     "Projektleiter Photovoltaik",
     "Projektleiter Solar",
@@ -57,6 +59,9 @@ QUERIES = [
     "Solar Projektmanager",
     "PV Project Manager",
     "Solar Project Manager",
+    "Bauherrenvertretung Photovoltaik",
+    "Technical Due Diligence Renewables",
+    "Tender Manager Solar",
 ]
 
 # Hardcoded PERMANENT blocks — genuine never-apply decisions (not rejections).
@@ -90,6 +95,10 @@ MATCH_SIGNALS = [
       "gewerblich", "industriedach"], 10),
 ]
 
+# 2026-07-17: added driving-licence blockers (no licence — field/Aussendienst
+# roles are structurally out per criteria v6). Note: JDs listing the licence
+# as "von Vorteil" will also be caught — accepted trade-off, since Swiss PV
+# roles listing Kat. B are almost always field-territory roles.
 HARD_BLOCKERS = [
     "elektroinstallateur efz",
     "montage-elektriker",
@@ -103,6 +112,9 @@ HARD_BLOCKERS = [
     "monteur",
     "10-20 stunden",
     "studentenjob",
+    "führerschein kat. b",
+    "führerausweis kat. b",
+    "führerschein der kategorie b",
 ]
 
 DOMAIN_MISMATCH = [
