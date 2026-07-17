@@ -32,12 +32,12 @@
   {
     "company": "ckw",
     "rejection_date": "2026-04-17",
-    "blocked_until": "2027-04-17",
+    "blocked_until": "2027-07-13",
     "rejection_type": "explicit",
     "block_scope": "role",
     "role_pattern": "projektleiter.*solar|projektleiterin.*solar|projektleiter.*solartechnik",
-    "source": "gmail-scrape-2026-05-27",
-    "notes": "Teamtailor ATS. CKW said 'Absagen automatisiert versenden' but this refers to email delivery, not the decision. Human moved application to rejected. Upgraded from 6mo to 12mo per ATS research."
+    "source": "claude-daily-sync-2026-07-17",
+    "notes": "Teamtailor ATS. First rejection 17.04.2026 (Solartechnik), second rejection 13.07.2026 (Projektleiter/in Solar) — same automated pattern, cooldown extended 12mo from second rejection. Do not reapply before C1 or profile change."
   },
   {
     "company": "younergy",
@@ -98,5 +98,25 @@
     "role_pattern": "asset.*development.*manager.*photovoltaik|asset.*development.*manager.*pv",
     "source": "gmail-scrape-2026-05-27",
     "notes": "Direct from C.Engelbrecht@primeo-energie.ch. Personal sender, role-specific. Other Primeo roles remain eligible."
+  },
+  {
+    "company": "ampere dynamic",
+    "rejection_date": "2026-07-01",
+    "blocked_until": "2027-01-01",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiter.*pv|projektleiterin.*pv|projektleiter.*energiel(oe|ö)sungen",
+    "source": "claude-daily-sync-2026-07-17",
+    "notes": "Rejected after first interview by V. Oberngruber — other candidate available faster (start August). Not a fit rejection. Warm door: documents kept on file, invited to stay in touch. 6mo cooldown only."
+  },
+  {
+    "company": "novases",
+    "rejection_date": "2026-07-17",
+    "blocked_until": "2027-07-17",
+    "rejection_type": "explicit",
+    "block_scope": "company",
+    "role_pattern": null,
+    "source": "claude-daily-sync-2026-07-17",
+    "notes": "WhatsApp pre-screen (Nadine Reisle, HR): C1 required for client contact, B1 insufficient. German C&I company — only relevant if it leaks into Adzuna CH results. Warm door at C1."
   }
 ]
