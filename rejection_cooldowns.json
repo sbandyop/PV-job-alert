@@ -17,7 +17,7 @@
     "block_scope": "role",
     "role_pattern": "projektmanager.*solar|technische.*projektmanager.*solar|solar.*projektmanager",
     "source": "gmail-scrape-2026-05-27",
-    "notes": "Rejected after in-person interview. Reason: German fluency insufficient. Otherwise great fit. Reapply after B2 certification."
+    "notes": "Rejected after in-person interview. Reason: German fluency insufficient. Otherwise great fit. Reapply after B2 certification. UPDATE 2026-07-21: B2 working level arguably reached (2-3 interviews conducted in German since March, criteria v9) - decision point at expiry 12.09.2026."
   },
   {
     "company": "sonnwende",
@@ -32,12 +32,12 @@
   {
     "company": "ckw",
     "rejection_date": "2026-04-17",
-    "blocked_until": "2027-07-13",
+    "blocked_until": "2027-04-17",
     "rejection_type": "explicit",
     "block_scope": "role",
     "role_pattern": "projektleiter.*solar|projektleiterin.*solar|projektleiter.*solartechnik",
-    "source": "claude-daily-sync-2026-07-17",
-    "notes": "Teamtailor ATS. First rejection 17.04.2026 (Solartechnik), second rejection 13.07.2026 (Projektleiter/in Solar) — same automated pattern, cooldown extended 12mo from second rejection. Do not reapply before C1 or profile change."
+    "source": "gmail-scrape-2026-05-27",
+    "notes": "Teamtailor ATS. CKW said 'Absagen automatisiert versenden' but this refers to email delivery, not the decision. Human moved application to rejected. Upgraded from 6mo to 12mo per ATS research."
   },
   {
     "company": "younergy",
@@ -100,23 +100,63 @@
     "notes": "Direct from C.Engelbrecht@primeo-energie.ch. Personal sender, role-specific. Other Primeo roles remain eligible."
   },
   {
+    "company": "ckw",
+    "rejection_date": "2026-07-13",
+    "blocked_until": "2027-07-13",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiter.*solar|projektleiterin.*solar",
+    "source": "claude-daily-sync-2026-07-21",
+    "notes": "Second CKW rejection in 3 months (applied 09.07, automated CV-screen 13.07, R. Keller/Teamtailor). Extends prior block from 2027-04-17."
+  },
+  {
     "company": "ampere dynamic",
     "rejection_date": "2026-07-01",
     "blocked_until": "2027-01-01",
     "rejection_type": "explicit",
     "block_scope": "role",
-    "role_pattern": "projektleiter.*pv|projektleiterin.*pv|projektleiter.*energiel(oe|ö)sungen",
-    "source": "claude-daily-sync-2026-07-17",
-    "notes": "Rejected after first interview by V. Oberngruber — other candidate available faster (start August). Not a fit rejection. Warm door: documents kept on file, invited to stay in touch. 6mo cooldown only."
+    "role_pattern": "projektleiter.*pv|projektleiter.*energieloesungen|projektleiter.*energielösungen",
+    "source": "claude-daily-sync-2026-07-21",
+    "notes": "Post-interview, speed-to-start rejection (V. Oberngruber: 'andere Kandidatin... bereits ab August antreten kann'). 6mo per speed-based rule. Warm door. Interviews were conducted IN GERMAN - positive language evidence (criteria v9)."
+  },
+  {
+    "company": "omniwatt",
+    "rejection_date": "2026-02-13",
+    "blocked_until": "2026-08-13",
+    "rejection_type": "explicit",
+    "block_scope": "company",
+    "role_pattern": null,
+    "source": "claude-daily-sync-2026-07-21",
+    "notes": "Post-technical-call rejection (join.com). 6mo per post-interview rule. NOTE: subagent audit found a FIRST rejection 08.09.2025 ('Projektleiter Solar') - if repeat-rejection logic applies, use 2027-02-13 instead. Expires in 3 weeks under the 6mo reading."
   },
   {
     "company": "novases",
     "rejection_date": "2026-07-17",
-    "blocked_until": "2027-07-17",
+    "blocked_until": "2027-01-17",
+    "rejection_type": "pre-screen",
+    "block_scope": "company",
+    "role_pattern": null,
+    "source": "claude-daily-sync-2026-07-21",
+    "notes": "WhatsApp pre-screen (N. Reisle): C1 required for Kundenkontakt. Language-based 6mo. Warm door. UPDATE per criteria v9: with B2 working level + German-interview track record, consider re-contacting BEFORE waiting for the C1 certificate."
+  },
+  {
+    "company": "ewz",
+    "rejection_date": "2026-05-27",
+    "blocked_until": "2026-11-27",
     "rejection_type": "explicit",
     "block_scope": "company",
     "role_pattern": null,
-    "source": "claude-daily-sync-2026-07-17",
-    "notes": "WhatsApp pre-screen (Nadine Reisle, HR): C1 required for client contact, B1 insufficient. German C&I company — only relevant if it leaks into Adzuna CH results. Warm door at C1."
+    "source": "claude-daily-sync-2026-07-21",
+    "notes": "'Leider haben wir zurzeit keine Stelle frei' + talent pool invite. No-vacancy hold (soft), 6mo per sonnwende precedent. Still in ewz talent pool and receiving mailings."
+  },
+  {
+    "company": "hitachi energy",
+    "rejection_date": "2026-05-28",
+    "blocked_until": "2027-05-28",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "protection.*control|leittechnik|schutztechnik",
+    "source": "claude-daily-sync-2026-07-21",
+    "notes": "Anchored to explicit requisition closure 28.05 ('this requisition has been closed'), not the 12.05 acknowledgment. Role type is red-flagged anyway (hands-on P&C)."
   }
 ]
