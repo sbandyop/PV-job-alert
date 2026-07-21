@@ -80,7 +80,7 @@ FUNCTION_REJECT_TITLE = [
     "foreman", "contremaître", "contremaitre",
     "dessinateur", "dessinatrice", "zeichner", "zeichnerin",
     "draftsman",
-    "chef de chantier", "bauleiter elektro", "bauleiter installation",
+    "chef de chantier", "bauleiter elektro", "bauleiter installation", "aussendienst", "projektentwickler",
 ]
 
 # --- Trade-track qualification required, found in JD BODY (not title) ---
@@ -117,6 +117,12 @@ SALES_REJECT_BODY = [
     r"neukundengewinnung",
     r"vertriebsverantwortung",
 ]
+
+# --- Explicit German language walls (criteria v9, 2026-07-21): only C1/C2, stilsicher, fliessend, Muttersprache as requirement. Unstated German = pre-screen at scoring stage, NOT filtered here. ---
+GERMAN_WALL_REJECT_BODY = [r"stilsicher\w*\s+deutsch", r"muttersprache\s*:?\s*deutsch", r"deutsch\s+als\s+muttersprache", r"deutsch\w*\s+(?:auf\s+)?(?:niveau\s+)?c[12]\b", r"\bc[12]\b[\s-]*(?:niveau\s+)?deutsch", r"flie(?:ss|ß)end\w*\s+deutsch", r"deutsch\w*\s+flie(?:ss|ß)end"]
+
+# --- Aussendienst + driving licence (criteria 2026-07-21, no Kat. B): reject only when both tokens appear within 200 chars; licence-only mentions stay in scope (rail-reachable). ---
+FIELD_LICENCE_REJECT_BODY = [r"aussendienst.{0,200}f(?:ü|ue)hrer(?:schein|ausweis)", r"f(?:ü|ue)hrer(?:schein|ausweis).{0,200}aussendienst"]
 
 # --- Agency-shell signals: staffing reposts for undisclosed end clients ---
 AGENCY_POSTER_NAMES = [
@@ -492,6 +498,10 @@ def passes_requirements_body(jd_body: str) -> tuple[bool, str]:
         return False, "Bauleitung as core duty"
     if _matches_any(SALES_REJECT_BODY, body):
         return False, "sales/acquisition primary function"
+    if _matches_any(GERMAN_WALL_REJECT_BODY, body):
+        return False, "explicit German language wall (C1/stilsicher/Muttersprache)"
+    if _matches_any(FIELD_LICENCE_REJECT_BODY, body):
+        return False, "Aussendienst + driving licence required (no Kat. B)"
     return True, ""
 
 
