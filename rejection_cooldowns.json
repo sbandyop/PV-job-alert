@@ -158,5 +158,25 @@
     "role_pattern": "protection.*control|leittechnik|schutztechnik",
     "source": "claude-daily-sync-2026-07-21",
     "notes": "Anchored to explicit requisition closure 28.05 ('this requisition has been closed'), not the 12.05 acknowledgment. Role type is red-flagged anyway (hands-on P&C)."
-  }
+  },
+    {
+          "company": "renera energy",
+          "rejection_date": "2025-11-18",
+          "blocked_until": "2026-11-18",
+          "rejection_type": "explicit",
+          "block_scope": "company",
+          "role_pattern": null,
+          "source": "claude-daily-sync-2026-07-27",
+          "notes": "CV-screen rejection (Debora Gsaller, Teamtailor) after 11.11.2025 application for Projektleitung PV und Batteriespeicher. Small Basel-based CH firm - company scope. 12mo CV-screen rule. Date confirmed against Gmail 27.07."
+    },
+    {
+          "company": "urbasolar",
+          "rejection_date": "2025-08-29",
+          "blocked_until": "2026-08-29",
+          "rejection_type": "explicit",
+          "block_scope": "role",
+          "role_pattern": "pv studies engineer|studies engineer",
+          "source": "claude-daily-sync-2026-07-27",
+          "notes": "PV Studies Engineer rejection ('not shortlisted... other candidates better fit'). Axpo FR subsidiary (mail cites 'working for Axpo'; sender urbasolar.teamtailor-mail.com). Scoped to urbasolar/role per Soumi 27.07 so Axpo direct-employer results stay visible. Phone screen 08.08.2025 preceded rejection. Expires 29.08.2026."
+    }
 ]
