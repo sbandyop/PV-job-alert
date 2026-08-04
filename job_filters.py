@@ -31,12 +31,30 @@ KEYWORDS_FUNCTION = [
     "chef de projet", "cheffe de projet", "responsable de projet",
     "responsable de projets", "owner's engineer", "owner engineer",
     "technical project", "technischer projektleiter",
-    "procurement", "beschaffung", "tender", "tendering", "appel d'offres",
-    "buyer", "einkauf", "einkäufer", "achats", "acheteur", "bauherrenvertretung", "bauherrenberatung", "bauherrenvertreter",
+    "bauherrenvertretung", "bauherrenberatung", "bauherrenvertreter",
     "eigentümervertretung", "eigentumervertretung",
     "technische due diligence", "technical due diligence",
     "gesamtprojektleitung", "gesamtprojektleiter",
     "inbetriebnahme",  # commissioning-lead roles
+]
+
+# --- Narrow-specialist reject (criteria 2026-07-29, Hitachi lesson) ---------
+# Roles whose CORE is tendering, quotation, bid preparation, calculation, RFQ
+# handling or procurement administration are out, regardless of language,
+# location or comp. Tendering stays a strong CV block and is still SCORED when
+# it is PART of a broader owner-side delivery/TDD role — it is just no longer
+# something the scraper goes looking for. Checked BEFORE the PM-keyword
+# early-return so a co-occurring "Manager" cannot bypass it.
+NARROW_SPECIALIST_TITLE_REJECT = [
+    r"tender\s*(and|&|/)?\s*(quotation|quote)?\s*(manager|specialist|engineer)",
+    r"\bbid manager\b",
+    r"angebots(ingenieur|manager|spezialist)",
+    r"\bkalkulator(in)?\b",
+    r"ausschreibungs(manager|spezialist|koordinator)",
+    r"procurement\s+(manager|specialist|officer|engineer)",
+    r"\beink(ä|ae)ufer(in)?\b",
+    r"\bbuyer\b",
+    r"quotation\s+(specialist|engineer|manager)",
 ]
 
 TECH_REJECT = [
@@ -98,6 +116,19 @@ REQUIREMENT_REJECT_BODY = [
     r"abgeschlossene\s+(grund)?ausbildung\s+(als\s+|im\s+)?elektro",
 ]
 
+# --- Softeners that make a credential requirement negotiable ------------------
+# Criteria 2026-07-29 (pre-screen-before-withdraw), vindicated 2026-07-31 when
+# tritec waived the EFZ requirement in writing. A credential token only gates
+# the role when it is stated hard. If any softener appears near the token, keep
+# the role live and let the pre-screen decide.
+CREDENTIAL_SOFTENERS = [
+    r"idealerweise", r"von vorteil", r"vorteilhaft", r"w(ü|ue)nschenswert",
+    r"\boder\b", r"\bbzw\.?\b", r"alternativ", r"gleichwertig",
+    r"(ä|ae)quivalent", r"vergleichbare?\s+(aus|vor)bildung",
+    r"vergleichbare?\s+qualifikation", r"nice to have", r"\bplus\b",
+]
+CREDENTIAL_SOFTENER_WINDOW = 160
+
 # --- Bauleitung as a core listed duty (site-construction management) ---
 # Matches only ownership/execution phrasings. Mere mention (e.g. owner-side
 # "Koordination der Bauleitung" / "Schnittstelle zur Bauleitung") must NOT
@@ -129,10 +160,18 @@ AGENCY_POSTER_NAMES = [
     "dasteam", "das team", "addexpert", "excellent go4", "excellent1",
     "zürcher consulting", "zuercher consulting",
 ]
+# 2026-08-04: "für unsere[nr]? kund" also matched ordinary employer copy
+# ("Wir realisieren für unsere Kunden PV-Anlagen"), which is standard on
+# owner's-engineer, planning and EPC sites — i.e. exactly the target segment.
+# Now the phrase only counts as an agency signal when it sits next to a
+# staffing/mandate word.
 AGENCY_SHELL_PHRASES = [
-    r"für unsere[nr]?\s+kund",
-    r"\bunser kunde\b",
+    r"f(ü|ue)r unsere[nrs]?\s+kund\w*\s+(suchen|rekrutieren|besetzen)",
+    r"(suchen|rekrutieren|besetzen)\w*\s+wir\s+f(ü|ue)r unsere[nrs]?\s+kund",
+    r"im auftrag (von |der |des )?unsere[nrs]?\s+kund",
+    r"unser kunde\s+(ist|sucht)",
     r"personalverleih", r"personalvermittlung", r"verleih von personal",
+    r"temporär|temporaer.{0,20}(einsatz|stelle)",
 ]
 
 # --- Target-region restriction: German-speaking Switzerland (Deutschschweiz) ---
@@ -184,6 +223,15 @@ SWISS_LOCATIONS = {
     "liestal", "allschwil", "reinach", "dübendorf", "duebendorf",
     "opfikon", "regensdorf", "schlieren", "uster", "wil",
     "aargau", "basel-landschaft", "basel-stadt", "baselland",
+    # 2026-08-04: towns that previously fell through the whitelist
+    "aarberg", "lyssach", "sissach", "oberdorf", "zuchwil", "neuhausen",
+    "sursee", "wohlen", "lenzburg", "grenchen", "langenthal", "burgdorf",
+    "buchs", "gossau", "herisau", "einsiedeln", "schwyz", "sarnen", "stans",
+    "altdorf", "glarus", "appenzell", "romanshorn", "arbon", "amriswil",
+    "kreuzlingen", "rapperswil", "horgen", "meilen", "affoltern", "bülach",
+    "buelach", "kloten", "urdorf", "birsfelden", "aesch", "arlesheim",
+    "laufen", "delsberg", "solothurn", "olten", "zofingen", "baden",
+    "bern", "biel", "bienne", "thun", "luzern", "zug", "chur",
 }
 
 COMMUTE_LOCATIONS = {
@@ -234,17 +282,53 @@ STOPWORDS_EN = {"the", "and", "of", "to", "a", "in", "for", "is", "you",
 # Individual filter functions
 # ============================================================================
 
+NON_CH_LOCATION_TOKENS = {
+    # countries
+    "germany", "deutschland", "austria", "österreich", "oesterreich",
+    "france", "frankreich", "italy", "italia", "italien", "spain", "spanien",
+    "españa", "portugal", "netherlands", "niederlande", "belgium", "belgien",
+    "poland", "polen", "czech", "tschechien", "hungary", "ungarn",
+    "bulgaria", "bulgarien", "romania", "rumänien", "united kingdom",
+    "sweden", "schweden", "norway", "norwegen", "finland", "finnland",
+    "denmark", "dänemark", "singapore", "singapur", "usa", "united states",
+    "liechtenstein", "luxembourg", "luxemburg",
+    # foreign cities that appear in the scraped employers' own slugs
+    "milano", "milan", "roma", "rome", "torino", "madrid", "barcelona",
+    "paris", "lyon", "marseille", "sofia", "budapest", "praha", "prague",
+    "warszawa", "warsaw", "london", "manchester", "frankfurt", "münchen",
+    "munich", "berlin", "hamburg", "stuttgart", "köln", "koeln", "wien",
+    "vienna", "oslo", "helsinki", "stockholm", "amsterdam", "bruxelles",
+    "brussels", "istanbul", "dubai",
+}
+
+
+def _token_hit(loc: str, vocabulary) -> bool:
+    return any(re.search(rf"(?<![a-zà-ÿ]){re.escape(tok)}(?![a-zà-ÿ])", loc)
+               for tok in vocabulary)
+
+
 def is_swiss_location(location: str) -> bool:
+    """Guarded blocklist (2026-08-04).
+
+    Was a pure whitelist, which silently dropped every Swiss town not in
+    SWISS_LOCATIONS — Aarberg, Lyssach, Sissach, Oberdorf, Zuchwil, Sursee,
+    Lenzburg, Grenchen, Langenthal, Burgdorf ... The employer scrapers derive
+    the location from a URL slug (a bare town name), so those roles never even
+    reached the JD fetch. Now: explicit Swiss hit -> keep; explicit foreign hit
+    -> drop; anything else -> keep and let the region/workmode/PM gates decide.
+    Safe because every upstream source is already CH-scoped (Adzuna /jobs/ch,
+    Swiss employer careers pages).
+    """
     if not location:
         return False
     loc = location.lower().strip()
     if loc in SWISS_LOCATIONS:
         return True
-    # Word-boundary match, not substring: prevents "wil"->"Wilhelmshaven",
-    # "zug"->"Zugspitze"-class false positives while keeping "basel-stadt",
-    # "greater zurich area", "kanton aargau" matches.
-    return any(re.search(rf"(?<![a-zà-ÿ]){re.escape(ch)}(?![a-zà-ÿ])", loc)
-               for ch in SWISS_LOCATIONS)
+    if _token_hit(loc, SWISS_LOCATIONS):
+        return True
+    if _token_hit(loc, NON_CH_LOCATION_TOKENS):
+        return False
+    return True
 
 
 def is_commute_location(location: str) -> bool:
@@ -271,6 +355,9 @@ def _normalize_title(s: str) -> str:
 def passes_function_filter(title: str) -> tuple[bool, str]:
     """Reject installer/technician titles unless title also has a PM keyword."""
     t = _normalize_title(title).lower()
+    for pat in NARROW_SPECIALIST_TITLE_REJECT:
+        if re.search(pat, t):
+            return False, "narrow specialist (tender/quotation/calculation core)"
     if any(kw in t for kw in KEYWORDS_FUNCTION):
         return True, ""
     for bad in FUNCTION_REJECT_TITLE:
@@ -486,14 +573,33 @@ def _matches_any(patterns, text):
     return any(re.search(p, text) for p in patterns)
 
 
+def _credential_gate_is_hard(body: str) -> tuple[bool, str]:
+    """True if a credential token appears WITHOUT a softener nearby.
+
+    Returns (is_hard, softener_found). Empty body -> (False, "") i.e. fails open.
+    """
+    if not body:
+        return False, ""
+    for pat in REQUIREMENT_REJECT_BODY:
+        for m in re.finditer(pat, body):
+            lo = max(0, m.start() - CREDENTIAL_SOFTENER_WINDOW)
+            hi = min(len(body), m.end() + CREDENTIAL_SOFTENER_WINDOW)
+            window = body[lo:hi]
+            soft = next((s for s in CREDENTIAL_SOFTENERS if re.search(s, window)), None)
+            if not soft:
+                return True, ""
+    return False, "softener present near credential token"
+
+
 def passes_requirements_body(jd_body: str) -> tuple[bool, str]:
     """Scan JD body for trade-track gate / Bauleitung / sales-primary.
     Fails OPEN on empty body (no body fetched -> let scoring decide)."""
     body = (jd_body or "").lower()
     if not body:
         return True, ""
-    if _matches_any(REQUIREMENT_REJECT_BODY, body):
-        return False, "EFZ / eidg. Fachausweis Elektro required (trade-track gate)"
+    hard, soft_hit = _credential_gate_is_hard(body)
+    if hard:
+        return False, "EFZ / eidg. Fachausweis Elektro required, stated hard (trade-track gate)"
     if _matches_any(BAULEITUNG_REJECT_BODY, body):
         return False, "Bauleitung as core duty"
     if _matches_any(SALES_REJECT_BODY, body):

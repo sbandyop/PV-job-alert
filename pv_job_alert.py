@@ -15,6 +15,7 @@ Pause by editing config.json on GitHub.
 """
 
 import os
+import re
 import json
 import requests
 import smtplib
@@ -48,6 +49,9 @@ def save_seen_adzuna(seen, path=SEEN_ADZUNA_PATH):
 # ─── SEARCH QUERIES ──────────────────────────────────────────────────────────
 # 2026-07-17 sync with criteria doc v6: added owner-side/TDD/tender terms —
 # the segment where the profile converts best.
+# 2026-08-04: "Tender Manager Solar" removed. Criteria v9 + the 2026-07-29
+# narrow-specialist rule reject tender/quotation/bid roles outright, so the
+# scraper should not be spending a query slot hunting for them.
 QUERIES = [
     "Projektleiter Photovoltaik",
     "Projektleiter Solar",
@@ -61,7 +65,7 @@ QUERIES = [
     "Solar Project Manager",
     "Bauherrenvertretung Photovoltaik",
     "Technical Due Diligence Renewables",
-    "Tender Manager Solar",
+    "Bauherrenberatung Erneuerbare Energien",
 ]
 
 # Hardcoded PERMANENT blocks — genuine never-apply decisions (not rejections).
@@ -95,43 +99,73 @@ MATCH_SIGNALS = [
       "gewerblich", "industriedach"], 10),
 ]
 
+# 2026-08-04: HARD_BLOCKERS and DOMAIN_MISMATCH are now REGEX patterns, matched
+# with re.search instead of naive substring containment. Substring matching had
+# produced silent false positives on ordinary German text (see notes below).
+# Literal entries are unchanged in meaning; only the matching mechanism and the
+# few demonstrably broken entries were altered.
+
 # 2026-07-17: added driving-licence blockers (no licence — field/Aussendienst
-# roles are structurally out per criteria v6). Note: JDs listing the licence
-# as "von Vorteil" will also be caught — accepted trade-off, since Swiss PV
-# roles listing Kat. B are almost always field-territory roles.
+# roles are structurally out per criteria v6).
+# 2026-08-04: "elektroinstallateur efz" removed from this list. The credential
+# gate now lives in job_filters.passes_requirements_body, which honours
+# softeners ("idealerweise", "von Vorteil", "oder Studium") per the
+# pre-screen-before-withdraw rule of 2026-07-29 — vindicated on 2026-07-31 when
+# tritec waived the EFZ requirement in writing. Keeping a hard duplicate here
+# would have defeated that fix at scoring time.
 HARD_BLOCKERS = [
-    "elektroinstallateur efz",
-    "montage-elektriker",
-    "französisch zwingend",
-    "french mandatory",
-    "french fluent required",
-    "auf dächern",
-    "auf dem dach",
-    "psa",
-    "dachdecker",
-    "monteur",
-    "10-20 stunden",
-    "studentenjob",
-    "führerschein kat. b",
-    "führerausweis kat. b",
-    "führerschein der kategorie b",
+    r"montage-elektriker",
+    r"französisch zwingend",
+    r"french mandatory",
+    r"french fluent required",
+    r"auf dächern",
+    r"auf dem dach",
+    r"\bpsa\b",                     # was "psa": unbounded substring
+    r"dachdecker",
+    r"\bmonteur",
+    r"10-20 stunden",
+    r"studentenjob",
+    r"führerschein kat\. b",
+    r"führerausweis kat\. b",
+    r"führerschein der kategorie b",
 ]
 
 DOMAIN_MISMATCH = [
-    "wasserkraft", "hydro", "wärme", "steam turbine",
-    "quantum", "pharma", "rolling stock", "automation",
-    "buchhaltung", "accountant", "hr ", "informatik",
-    "netzelektriker", "dachmonteur", "solarteur",
+    r"wasserkraft",
+    r"hydro(?!gen)",                # hydropower, but not green-hydrogen asides
+    r"\bwärme\b",                   # heat as the domain, not "Abwärme"/"Wärmepumpe"
+    r"steam turbine",
+    r"quantum",
+    r"pharma",
+    r"rolling stock",
+    r"\bautomation\b",
+    r"buchhaltung",
+    r"accountant",
+    r"\bhr\b",                      # 2026-08-04 CRITICAL FIX: was "hr ", which is a
+                                    # substring of "Ihr ", "sehr ", "mehr " and "Jahr ".
+                                    # Because this check returns score 0 / "Skip" before
+                                    # any scoring, essentially every German-language JD
+                                    # was discarded as a domain mismatch.
+    r"informatik",
+    r"netzelektriker",
+    r"dachmonteur",
+    r"solarteur",
 ]
+
+
+def _first_pattern_hit(patterns, text):
+    """Return the first pattern that matches, else None."""
+    return next((p for p in patterns if re.search(p, text)), None)
 
 
 def score_job(title, company, description):
     text = (title + " " + description).lower()
 
-    if any(kw in text for kw in DOMAIN_MISMATCH):
-        return 0, "Skip", "Domain mismatch", ""
+    mismatch_hit = _first_pattern_hit(DOMAIN_MISMATCH, text)
+    if mismatch_hit:
+        return 0, "Skip", "Domain mismatch", f"Domain mismatch: {mismatch_hit}"
 
-    blocker_hit = next((kw for kw in HARD_BLOCKERS if kw in text), None)
+    blocker_hit = _first_pattern_hit(HARD_BLOCKERS, text)
 
     score = 0
     for keywords, points in MATCH_SIGNALS:
@@ -233,10 +267,13 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
         score, verdict, key_match, key_gap = score_job(title, company, desc)
         print(f"  {verdict} ({score}%): {title} @ {company}")
 
-        if jid:
-            seen_ids.add(jid)
-
         if verdict == "Apply":
+            # 2026-08-04: only emailed roles are recorded as seen. Previously the
+            # id was added here for every job that passed the filter chain, so a
+            # near-miss (say 45%) was suppressed forever and never resurfaced —
+            # exactly the band worth re-reading once criteria or wording change.
+            if jid:
+                seen_ids.add(jid)
             matches.append({
                 "source": "adzuna",
                 "title": title, "company": company, "location": loc,

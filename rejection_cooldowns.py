@@ -87,19 +87,50 @@ def load_cooldowns(path: str = "rejection_cooldowns.json") -> list[dict]:
     return active
 
 
+_LEGAL_SUFFIXES = {
+    "ag", "sa", "gmbh", "sarl", "sagl", "inc", "ltd", "llc", "plc", "bv", "nv",
+    "holding", "group", "gruppe", "groupe", "co", "kg", "ohg", "se",
+}
+
+
+def _norm_company(name: str) -> set[str]:
+    """Normalise a company name to a token set for robust matching.
+
+    Lowercase, strip punctuation and legal-form suffixes. "K. Schweizer AG"
+    -> {"k", "schweizer"}; "Renera AG" -> {"renera"}.
+    """
+    n = (name or "").lower()
+    n = re.sub(r"[^\w\s]", " ", n, flags=re.UNICODE)
+    tokens = [t for t in n.split() if t and t not in _LEGAL_SUFFIXES]
+    return set(tokens)
+
+
+def company_matches(entry_company: str, job_company: str) -> bool:
+    """Subset match on normalised tokens, in whichever direction is shorter.
+
+    2026-08-04: replaces a raw substring test. The old test had two failure
+    modes, both observed:
+      - MISS: entry "renera energy" never matched the real entity "Renera AG",
+        so the Renera cooldown silently never fired.
+      - FALSE HIT: entry "ewz" matched any company containing that letter run.
+    """
+    a, b = _norm_company(entry_company), _norm_company(job_company)
+    if not a or not b:
+        return False
+    return a.issubset(b) or b.issubset(a)
+
+
 def is_blocked(company: str, title: str, cooldowns: list[dict]) -> tuple[bool, dict | None]:
     """Check if a job is in active cooldown.
 
     Match logic:
-      - company-scope block: company name substring match (case-insensitive)
-      - role-scope block: company name AND role_pattern regex must both match
+      - company-scope block: normalised company token-subset match
+      - role-scope block: company match AND role_pattern regex must both match
     """
-    company_lower = (company or "").lower()
     title_lower = (title or "").lower()
 
     for entry in cooldowns:
-        entry_company = entry.get("company", "").lower()
-        if not entry_company or entry_company not in company_lower:
+        if not company_matches(entry.get("company", ""), company):
             continue
 
         scope = entry.get("block_scope", "company")
