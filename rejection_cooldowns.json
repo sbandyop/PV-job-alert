@@ -188,5 +188,15 @@
     "role_pattern": null,
     "source": "claude-daily-sync-2026-07-30",
     "notes": "CV-screen rejection (Claudia Scherrer, 27.07): better-fitting applications PLUS explicit language judgment ('reichen zum jetzigen Zeitpunkt die Deutschkenntnisse nicht aus') without any interview. Company scope per explicit-language-judgment rule. 12mo CV-screen rule. Soumi replied 29.07 keeping the door open (B2 in progress)."
+  },
+  {
+    "company": "enido",
+    "rejection_date": "2026-08-04",
+    "blocked_until": "2027-08-04",
+    "rejection_type": "explicit",
+    "block_scope": "role",
+    "role_pattern": "projektleiter.*photovoltaik|projektleiterin.*photovoltaik",
+    "source": "claude-daily-sync-2026-08-05",
+    "notes": "CV-screen rejection (Jelena Sorrenti, Sales Manager, 04.08.2026 11:17) replying to the 03.08 status enquiry: 'wir Sie im weiteren Bewerbungsverfahren leider nicht beruecksichtigen koennen'. No interview stage reached. Applied 17.07.2026 via LinkedIn Easy Apply; the Kat.-B driving-licence screening question was answered NO. 12mo CV-screen rule. Role scope: Projektleitung PV Aargau/Solothurn, residential/C&I segment."
   }
 ]
