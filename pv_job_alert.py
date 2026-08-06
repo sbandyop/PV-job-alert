@@ -25,6 +25,7 @@ from datetime import datetime
 
 from job_filters import apply_filter_chain, fetch_jd_body
 from swiss_employers import fetch_swiss_employer_jobs
+from swiss_boards import fetch_swiss_board_jobs
 from rejection_cooldowns import load_cooldowns, is_blocked, format_expiring_soon
 
 # ─── SECRETS ────────────────────────────────────────────────────────────────
@@ -300,8 +301,9 @@ def filter_swiss_by_cooldown(swiss_jobs, cooldowns):
 
 # ─── EMAIL ───────────────────────────────────────────────────────────────────
 
-def send_email(adzuna_matches, swiss_matches, expiring_cooldowns):
-    total = len(adzuna_matches) + len(swiss_matches)
+def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=None):
+    board_matches = board_matches or []
+    total = len(adzuna_matches) + len(swiss_matches) + len(board_matches)
     date_str = datetime.now().strftime("%d %B %Y")
 
     body = f"Weekly PV Job Alert — {date_str}\n"
@@ -330,7 +332,19 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns):
             body += f"LINK:      {j['url']}\n"
             body += "-" * 40 + "\n\n"
 
-    if not adzuna_matches and not swiss_matches:
+    if board_matches:
+        body += f"\n### SWISS BOARDS ({len(board_matches)})\n\n"
+        for j in board_matches:
+            body += f"ROLE:      {j['title']}\n"
+            body += f"COMPANY:   {j.get('company') or '(see posting)'}\n"
+            body += f"LOCATION:  {j.get('location') or '(see posting)'}\n"
+            if j.get("posted"):
+                body += f"POSTED:    {j['posted']}\n"
+            body += f"SOURCE:    {j.get('source', 'swiss-board')}\n"
+            body += f"LINK:      {j['url']}\n"
+            body += "-" * 40 + "\n\n"
+
+    if not adzuna_matches and not swiss_matches and not board_matches:
         body += "No matches this week.\n"
         body += "All results were filtered out by CH/language/function/cooldown checks.\n\n"
 
@@ -393,15 +407,24 @@ def main():
         print(f"[WARN] Swiss scrape failed: {e}")
         swiss_matches = []
 
+    print("\n--- SWISS BOARD SCRAPE (Swissolar / JobScout24 / Fachplanung) ---")
+    try:
+        board_raw = fetch_swiss_board_jobs(state_path="seen_board_jobs.json")
+        board_matches = filter_swiss_by_cooldown(board_raw, cooldowns)
+    except Exception as e:
+        print(f"[WARN] Swiss board scrape failed: {e}")
+        board_matches = []
+
     expiring = format_expiring_soon(cooldowns, days=30)
 
     print(f"\n--- SUMMARY ---")
     print(f"Adzuna matches: {len(adzuna_matches)}")
     print(f"Swiss direct matches: {len(swiss_matches)}")
+    print(f"Swiss board matches: {len(board_matches)}")
     print(f"Cooldowns expiring soon: {len(expiring)}")
 
-    if adzuna_matches or swiss_matches or expiring:
-        send_email(adzuna_matches, swiss_matches, expiring)
+    if adzuna_matches or swiss_matches or board_matches or expiring:
+        send_email(adzuna_matches, swiss_matches, expiring, board_matches)
     else:
         print("No matches and no expiring cooldowns — no email sent.")
 
