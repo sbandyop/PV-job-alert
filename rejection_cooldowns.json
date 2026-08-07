@@ -7,7 +7,7 @@
     "block_scope": "role",
     "role_pattern": "projektleiterin? erneuerbare energien|projektleiter.* erneuerbare energien",
     "source": "gmail-scrape-2026-05-27",
-    "notes": "SuccessFactors ATS, HR Business Partner Anett Schulze. Human decision confirmed by 'unter Mitbewerbern auswählen' language."
+    "notes": "SuccessFactors ATS, HR Business Partner Anett Schulze. Human decision confirmed by 'unter Mitbewerbern ausw\u00e4hlen' language."
   },
   {
     "company": "enshift",
@@ -27,7 +27,7 @@
     "block_scope": "company",
     "role_pattern": null,
     "source": "gmail-scrape-2026-05-27",
-    "notes": "No vacancy response to Initiativbewerbung. No role comparison made. Talent Pool invite. Small Basel C&I installer — unlikely to appear in utility-scale alert anyway."
+    "notes": "No vacancy response to Initiativbewerbung. No role comparison made. Talent Pool invite. Small Basel C&I installer \u2014 unlikely to appear in utility-scale alert anyway."
   },
   {
     "company": "ckw",
@@ -47,7 +47,7 @@
     "block_scope": "company",
     "role_pattern": null,
     "source": "gmail-scrape-2026-05-27",
-    "notes": "Factorial ATS. Small CH company — company-wide block appropriate. SME-scale means recruiter reviewed personally."
+    "notes": "Factorial ATS. Small CH company \u2014 company-wide block appropriate. SME-scale means recruiter reviewed personally."
   },
   {
     "company": "romande energie",
@@ -57,7 +57,7 @@
     "block_scope": "company",
     "role_pattern": null,
     "source": "gmail-scrape-2026-05-27",
-    "notes": "johdisuite.ch ATS. French-language company — language barrier is company-wide, not role-specific."
+    "notes": "johdisuite.ch ATS. French-language company \u2014 language barrier is company-wide, not role-specific."
   },
   {
     "company": "k. schweizer",
@@ -67,7 +67,7 @@
     "block_scope": "role",
     "role_pattern": "projektentwickl",
     "source": "gmail-scrape-2026-05-27",
-    "notes": "Direct email from Mirjam.Widmer@ksag.ch. Gebäudetechnik company (Burkhalter Gruppe). C&I/rooftop scope only — unlikely to reappear in utility-scale alert. | 2026-08-04: role_pattern widened to 'projektentwickl' - the previous pattern required the literal 'photovoltaik' and could not match its own rejected title 'Projektentwickler/in PV & E-Ladestationen'."
+    "notes": "Direct email from Mirjam.Widmer@ksag.ch. Geb\u00e4udetechnik company (Burkhalter Gruppe). C&I/rooftop scope only \u2014 unlikely to reappear in utility-scale alert. | 2026-08-04: role_pattern widened to 'projektentwickl' - the previous pattern required the literal 'photovoltaik' and could not match its own rejected title 'Projektentwickler/in PV & E-Ladestationen'."
   },
   {
     "company": "gruner",
@@ -81,13 +81,13 @@
   },
   {
     "company": "tritec",
-    "rejection_date": "2026-05-11",
-    "blocked_until": "2027-05-11",
+    "rejection_date": "2026-08-07",
+    "blocked_until": "2027-08-07",
     "rejection_type": "explicit",
     "block_scope": "role",
     "role_pattern": "projektleiter.*pv|projektleiterin.*pv|projektleiter.*photovoltaik",
-    "source": "gmail-scrape-2026-05-27",
-    "notes": "Direct from personal@tritec.ch (Clelia Fux). Uses Workday via Naturenergie group. No interview stage reached."
+    "source": "claude-daily-sync-2026-08-07",
+    "notes": "Direct from personal@tritec.ch (Clelia Fux). Uses Workday via Naturenergie group. No interview stage reached. | REPEAT REJECTION 2026-08-07 (Jon Andry, jobs@tritec.ch, Projektleiter:in Photovoltaik Aarberg): \"Dennoch muessen wir Ihnen mitteilen, dass Sie fuer die ausgeschriebene Stelle bei uns leider nicht in die engere Auswahl kommen.\" Dossier-/CV-Screen nach schriftlichem EFZ-Erlass 31.07. Sperre vom neueren Datum um 12 Monate verlaengert (vorher 2027-05-11). Scope bleibt role."
   },
   {
     "company": "primeo energie",
@@ -115,7 +115,7 @@
     "blocked_until": "2027-01-01",
     "rejection_type": "explicit",
     "block_scope": "role",
-    "role_pattern": "projektleiter.*pv|projektleiter.*energieloesungen|projektleiter.*energielösungen",
+    "role_pattern": "projektleiter.*pv|projektleiter.*energieloesungen|projektleiter.*energiel\u00f6sungen",
     "source": "claude-daily-sync-2026-07-21",
     "notes": "Post-interview, speed-to-start rejection (V. Oberngruber: 'andere Kandidatin... bereits ab August antreten kann'). 6mo per speed-based rule. Warm door. Interviews were conducted IN GERMAN - positive language evidence (criteria v9)."
   },
@@ -161,13 +161,13 @@
   },
   {
     "company": "renera energy",
-    "rejection_date": "2025-11-18",
-    "blocked_until": "2026-11-18",
+    "rejection_date": "2026-08-06",
+    "blocked_until": "2027-08-06",
     "rejection_type": "explicit",
     "block_scope": "company",
     "role_pattern": null,
-    "source": "claude-daily-sync-2026-07-27",
-    "notes": "CV-screen rejection (Debora Gsaller, Teamtailor) after 11.11.2025 application for Projektleitung PV und Batteriespeicher. Small Basel-based CH firm - company scope. 12mo CV-screen rule. Date confirmed against Gmail 27.07."
+    "source": "claude-daily-sync-2026-08-07",
+    "notes": "CV-screen rejection (Debora Gsaller, Teamtailor) after 11.11.2025 application for Projektleitung PV und Batteriespeicher. Small Basel-based CH firm - company scope. 12mo CV-screen rule. Date confirmed against Gmail 27.07. | REPEAT REJECTION 2026-08-06 (Tamara Mikerevic, tamara.mikerevic@renera.energy, +41 615448395, Projektleitung Gebaeudetechnik, Teamtailor): \"Leider muessen wir dir jedoch nach sorgfaeltiger Pruefung der Unterlagen mitteilen, dass wir sie zum jetzigen Zeitpunkt nicht weiterverfolgen werden.\" Zweite Absage; Bewerbung 30.07 lief gegen aktiven Cooldown (Soumi-Override). Sperre vom neueren Datum um 12 Monate verlaengert (vorher 2026-11-18). Scope bleibt company."
   },
   {
     "company": "urbasolar",
