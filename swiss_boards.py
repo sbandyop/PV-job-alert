@@ -29,7 +29,8 @@ import urllib.request
 from html import unescape
 from typing import Callable
 
-from job_filters import apply_filter_chain, fetch_jd_body, is_swiss_location
+from job_filters import (apply_filter_chain, fetch_jd_body, is_swiss_location,
+                         german_prescreen_flag)
 
 log = logging.getLogger(__name__)
 
@@ -278,6 +279,9 @@ def fetch_swiss_board_jobs(state_path: str = "seen_board_jobs.json") -> list[dic
             jd_body = ""
         if not jd_body:
             log.warning("  EMPTY BODY: %s | %s", j["title"], j["url"])
+        j["jd_note"] = (f"{len(jd_body)} chars" if jd_body
+                        else "NOT RETRIEVED - requirements unverified")
+        j["lang_note"] = german_prescreen_flag(jd_body)
         keep, reason = apply_filter_chain(
             title=j["title"],
             location=j.get("location", ""),
@@ -290,6 +294,7 @@ def fetch_swiss_board_jobs(state_path: str = "seen_board_jobs.json") -> list[dic
         if not keep:
             log.info("  REJECT %s: %s", j["title"], reason)
             continue
+        j["jd_body"] = jd_body  # for the domain-relevance gate downstream
         j["source"] = "swiss-board:" + j.get("board", "?")
         survivors.append(j)
 

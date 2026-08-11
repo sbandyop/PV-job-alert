@@ -150,7 +150,7 @@ SALES_REJECT_BODY = [
 ]
 
 # --- Explicit German language walls (criteria v9, 2026-07-21): only C1/C2, stilsicher, fliessend, Muttersprache as requirement. Unstated German = pre-screen at scoring stage, NOT filtered here. ---
-GERMAN_WALL_REJECT_BODY = [r"stilsicher\w*\s+deutsch", r"muttersprache\s*:?\s*deutsch", r"deutsch\s+als\s+muttersprache", r"deutsch\w*\s+(?:auf\s+)?(?:niveau\s+)?c[12]\b", r"\bc[12]\b[\s-]*(?:niveau\s+)?deutsch", r"flie(?:ss|ß)end\w*\s+deutsch", r"deutsch\w*\s+flie(?:ss|ß)end"]
+GERMAN_WALL_REJECT_BODY = [r"stilsicher\w*\s+deutsch", r"muttersprache\s*:?\s*deutsch", r"deutsch\s+als\s+muttersprache", r"deutsch\w*\s+(?:auf\s+)?(?:niveau\s+)?c[12]\b", r"\bc[12]\b[\s-]*(?:niveau\s+)?deutsch", r"flie(?:ss|ß)end\w*\s+deutsch", r"deutsch\w*\s+flie(?:ss|ß)end", r"perfekte?\w*\s+deutsch", r"deutsch\w*\s+perfekt", r"verhandlungssicher\w*\s+deutsch", r"deutsch\w*\s+verhandlungssicher", r"muttersprachniveau", r"deutsch\w*\s+auf\s+mutterspachniveau", r"excellent\s+command\s+of\s+german", r"perfect\s+command\s+of\s+german", r"flue\w*\s+(?:in\s+|written\s+and\s+spoken\s+)?german", r"german\W{0,10}\bfluen\w+", r"business[\s-]?fluent\s+german", r"native\W{0,10}german", r"german\W{0,12}native", r"german\s+at\s+native\s+level", r"german\s*[\(\[:,\-–]\s*\bc[12]\b", r"german\s+(?:language\s+)?(?:skills?\s+)?(?:at\s+|on\s+)?(?:a\s+)?(?:level\s+|niveau\s+)?\bc[12]\b", r"german\W{0,12}(?:level|niveau|proficiency)\W{0,6}\bc[12]\b", r"\bc[12]\b[\s\-]*(?:level\s+|niveau\s+)?german"]
 
 # --- Aussendienst + driving licence (criteria 2026-07-21, no Kat. B): reject only when both tokens appear within 200 chars; licence-only mentions stay in scope (rail-reachable). ---
 FIELD_LICENCE_REJECT_BODY = [r"aussendienst.{0,200}f(?:ü|ue)hrer(?:schein|ausweis)", r"f(?:ü|ue)hrer(?:schein|ausweis).{0,200}aussendienst"]
@@ -492,7 +492,74 @@ def _http_get(url: str) -> str:
     return ""
 
 
+# --- JD body quality gate (2026-08-11) ---------------------------------------
+# Every body-based gate below (language, credential, tech-focus) passes when it
+# finds nothing incriminating. A non-empty but worthless body — an ATS page
+# shell, or an og:description — therefore satisfies all of them silently, and
+# require_body's fail-closed branch never fires because the body is not "".
+# Result: roles whose real requirements live only in the rendered JD (e.g. a
+# native-German bar, or an SAP/IT scope) sail through. A body is only trusted
+# if it is substantive enough for a NEGATIVE finding to mean something.
+JD_MIN_CHARS = 320
+JD_MARKERS = [
+    "aufgabe", "anforderung", "profil", "qualifikation", "wir bieten",
+    "erwarten", "verantwort", "deine rolle", "ihre rolle", "das bringst du",
+    "responsibilit", "requirement", "qualification", "we offer", "your role",
+    "your profile", "what you", "tasks", "benefits",
+]
+
+
+def _is_usable_jd(body: str) -> bool:
+    """True only if the body is substantive enough to trust a negative finding.
+
+    Requires both a minimum length and at least two distinct JD section markers,
+    which page shells and meta descriptions do not have.
+    """
+    if not body:
+        return False
+    text = body.strip().lower()
+    if len(text) < JD_MIN_CHARS:
+        return False
+    return sum(1 for m in JD_MARKERS if m in text) >= 2
+
+
+def resolve_final_url(url: str) -> str:
+    """Follow redirects to the real destination without trusting the tracker.
+
+    Adzuna returns tracking redirect_urls; fetching one yields an Adzuna
+    interstitial rather than the employer's advert, so any requirement stated
+    only in the real posting is invisible to the filter chain. Returns the
+    original URL unchanged on any failure.
+    """
+    if not url:
+        return url
+    for method in ("HEAD", "GET"):
+        try:
+            req = urllib.request.Request(url, method=method, headers={
+                "User-Agent": UA,
+                "Accept-Language": "en;q=0.9, de;q=0.8, fr;q=0.7",
+            })
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                final = r.geturl()
+                if final:
+                    return final
+        except Exception:
+            continue
+    return url
+
+
 def fetch_jd_body(url: str) -> str:
+    """Fetch a JD body and return it only if it is usable.
+
+    Thin extractions are downgraded to "" so that the fail-closed logic in
+    apply_filter_chain (require_body) engages instead of the body gates
+    passing on boilerplate. Callers already log the empty case.
+    """
+    body = _extract_jd_body(url)
+    return body if _is_usable_jd(body) else ""
+
+
+def _extract_jd_body(url: str) -> str:
     """Fetch and extract job description body from a URL.
     Extraction order (most reliable first):
       1. schema.org JobPosting JSON-LD "description" (most job portals embed this,
@@ -609,6 +676,28 @@ def passes_requirements_body(jd_body: str) -> tuple[bool, str]:
     if _matches_any(FIELD_LICENCE_REJECT_BODY, body):
         return False, "Aussendienst + driving licence required (no Kat. B)"
     return True, ""
+
+
+# "Sehr gute / gute Deutschkenntnisse" sits BELOW the v9 wall list (C1,
+# stilsicher, fliessend, Muttersprache, perfekte). It is standard DACH
+# boilerplate and roughly B2-C1, i.e. inside reach at B2 working level, so it
+# is surfaced as a pre-screen note rather than used to drop the role.
+GERMAN_PRESCREEN_FLAG_BODY = [
+    r"sehr\s+gute?\s+deutsch", r"gute?\s+deutschkenntnisse",
+    r"good\s+(?:command\s+of\s+)?german", r"solide\s+deutsch",
+]
+
+
+def german_prescreen_flag(jd_body: str) -> str:
+    """Return a short note when German is required but below the wall level."""
+    body = (jd_body or "").lower()
+    if not body:
+        return ""
+    if _matches_any(GERMAN_WALL_REJECT_BODY, body):
+        return ""          # already a hard reject elsewhere
+    if _matches_any(GERMAN_PRESCREEN_FLAG_BODY, body):
+        return "German stated below wall level (sehr gute/gute) - pre-screen before applying"
+    return ""
 
 
 def passes_agency_shell(company: str, jd_body: str) -> tuple[bool, str]:

@@ -18,6 +18,7 @@ from typing import Callable
 from job_filters import (
     apply_filter_chain,
     fetch_jd_body,
+    german_prescreen_flag,
     is_swiss_location,
 )
 
@@ -274,6 +275,9 @@ def fetch_swiss_employer_jobs(state_path: str = "seen_swiss_jobs.json") -> list[
             log.warning("  JD fetch failed for %s: %s", j["title"], e)
             jd_body = ""
         j["jd_body"] = jd_body
+        j["jd_note"] = (f"{len(jd_body)} chars" if jd_body
+                        else "NOT RETRIEVED - requirements unverified")
+        j["lang_note"] = german_prescreen_flag(jd_body)
         if not jd_body:
             log.warning("  EMPTY BODY (extraction failed): %s | %s", j["title"], j["url"])
 
@@ -293,7 +297,8 @@ def fetch_swiss_employer_jobs(state_path: str = "seen_swiss_jobs.json") -> list[
     final = _dedupe_by_jd(survivors)
 
     for j in final:
-        j.pop("jd_body", None)
+        # jd_body retained for the domain-relevance gate in
+        # pv_job_alert.filter_swiss_by_cooldown; dropped there.
         j["source"] = "swiss-direct"
 
     _save_state(state_path, seen_before | all_current_urls)

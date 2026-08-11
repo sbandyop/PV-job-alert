@@ -22,8 +22,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from urllib.parse import urlparse
 
-from job_filters import apply_filter_chain, fetch_jd_body
+from job_filters import (apply_filter_chain, fetch_jd_body, resolve_final_url,
+                         german_prescreen_flag)
 from swiss_employers import fetch_swiss_employer_jobs
 from swiss_boards import fetch_swiss_board_jobs
 from rejection_cooldowns import load_cooldowns, is_blocked, format_expiring_soon
@@ -154,6 +156,14 @@ DOMAIN_MISMATCH = [
 ]
 
 
+def _host(url):
+    """Short hostname for the JD-provenance line."""
+    try:
+        return re.sub(r"^www\.", "", urlparse(url).netloc) or "?"
+    except Exception:
+        return "?"
+
+
 def _first_pattern_hit(patterns, text):
     """Return the first pattern that matches, else None."""
     return next((p for p in patterns if re.search(p, text)), None)
@@ -255,7 +265,24 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
             print(f"  SKIP (cooldown until {entry['blocked_until']}): {title} @ {company}")
             continue
 
-        jd_body = fetch_jd_body(link) if link else ""
+        # Adzuna hands out tracking redirects — resolve to the employer's
+        # real advert first, or the requirements stated only there are unseen.
+        jd_url  = resolve_final_url(link) if link else ""
+        jd_body = fetch_jd_body(jd_url) if jd_url else ""
+        # Provenance note. Adzuna's hand-off to the employer's advert is done in
+        # JavaScript (details -> /land/ad/<id>?aztt=<token>), so a runner cannot
+        # reach the real posting: everything we see is Adzuna's own truncated
+        # snippet. Say so, rather than let a clean filter pass imply the full
+        # requirements were checked. (Verified 2026-08-11.)
+        _h = _host(jd_url)
+        if not jd_body:
+            jd_note = "NOT RETRIEVED - requirements unverified"
+        elif "adzuna" in _h:
+            jd_note = (f"Adzuna snippet only ({len(jd_body)} chars) - full advert NOT "
+                       f"reachable; verify language + credentials on the employer page")
+        else:
+            jd_note = f"{len(jd_body)} chars from {_h}"
+        lang_note = german_prescreen_flag(jd_body)
 
         keep, reason = apply_filter_chain(
             title=title, location=loc, jd_body=jd_body,
@@ -279,13 +306,21 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
                 "source": "adzuna",
                 "title": title, "company": company, "location": loc,
                 "score": score, "key_match": key_match, "key_gap": key_gap,
-                "link": link,
+                "link": link, "jd_note": jd_note, "lang_note": lang_note,
             })
     return matches
 
 
 def filter_swiss_by_cooldown(swiss_jobs, cooldowns):
-    """Apply cooldown filter to Swiss employer scraper results."""
+    """Cooldown filter + domain-relevance gate for Swiss scraper results.
+
+    2026-08-11: these paths previously ran cooldown checks ONLY. score_job was
+    applied to Adzuna results alone, so a Swiss-direct hit needed just a PM
+    keyword in the title and no red flag in the body to be emailed — which is
+    how an Axpo SAP/ERP role reached the digest. score_job already rejects it
+    (DOMAIN_MISMATCH on 'automation', 0% and no PV token anywhere in the body);
+    it simply was never consulted. Reusing it here adds no new policy.
+    """
     kept = []
     for j in swiss_jobs:
         if is_rejected_permanent(j.get("company", "")):
@@ -295,6 +330,13 @@ def filter_swiss_by_cooldown(swiss_jobs, cooldowns):
         if blocked:
             print(f"  SWISS SKIP (cooldown until {entry['blocked_until']}): {j['title']}")
             continue
+        score, verdict, _km, key_gap = score_job(
+            j.get("title", ""), j.get("company", ""), j.get("jd_body", "") or "")
+        if verdict != "Apply":
+            print(f"  SWISS SKIP ({key_gap or 'insufficient PV/PM signal'}): {j['title']}")
+            continue
+        j["score"] = score
+        j.pop("jd_body", None)   # bulky; not needed beyond this point
         kept.append(j)
     return kept
 
@@ -318,6 +360,9 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=
             body += f"LOCATION:  {j['location']}\n"
             body += f"FIT:       {j['score']}%\n"
             body += f"MATCH:     {j['key_match']}\n"
+            body += f"JD BODY:   {j.get('jd_note', 'n/a')}\n"
+            if j.get('lang_note'):
+                body += f"LANGUAGE:  {j['lang_note']}\n"
             if j['key_gap']:
                 body += f"GAP:       {j['key_gap']}\n"
             body += f"LINK:      {j['link']}\n"
@@ -329,6 +374,9 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=
             body += f"ROLE:      {j['title']}\n"
             body += f"COMPANY:   {j['company']}\n"
             body += f"LOCATION:  {j['location']}\n"
+            body += f"JD BODY:   {j.get('jd_note', 'n/a')}\n"
+            if j.get('lang_note'):
+                body += f"LANGUAGE:  {j['lang_note']}\n"
             body += f"LINK:      {j['url']}\n"
             body += "-" * 40 + "\n\n"
 
@@ -340,6 +388,9 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=
             body += f"LOCATION:  {j.get('location') or '(see posting)'}\n"
             if j.get("posted"):
                 body += f"POSTED:    {j['posted']}\n"
+            body += f"JD BODY:   {j.get('jd_note', 'n/a')}\n"
+            if j.get('lang_note'):
+                body += f"LANGUAGE:  {j['lang_note']}\n"
             body += f"SOURCE:    {j.get('source', 'swiss-board')}\n"
             body += f"LINK:      {j['url']}\n"
             body += "-" * 40 + "\n\n"
