@@ -9,6 +9,9 @@ Sources verified reachable from a datacenter IP on 2026-08-06:
   - JobScout24                 (HTTP 200, plain fetch)
   - Fachplanung careers pages  (per-employer, static HTML)
 
+Verified 2026-08-15:
+  - job-room.ch / arbeit.swiss (HTTP 200, public JSON API, no auth, full JD in payload)
+
 Deliberately NOT here:
   - energie-job.ch, jobagent.ch - DataDome bot wall, HTTP 403 from any datacenter IP
     regardless of User-Agent. Cannot be scraped from GitHub Actions. Covered instead by
@@ -161,6 +164,96 @@ def scrape_jobscout24() -> list[dict]:
 
 
 # ============================================================================
+# job-room.ch / arbeit.swiss - Swiss public employment service (SECO / RAV)
+# ============================================================================
+#
+# Public JSON API, no auth, verified HTTP 200 from a datacenter IP on 2026-08-15.
+# Results carry the full job description, so no per-job JD fetch is needed -
+# unlike every other board here. Note /api/jobadvertisements/ returns 401; the
+# working path is /jobadservice/api/jobAdvertisements/_search.
+#
+# Two source-specific hazards, both observed on 2026-08-14:
+#   1. Keyword match is FULL TEXT, so a roofing or heating advert surfaces merely
+#      because the employer's boilerplate paragraph mentions Solaranlagen. The
+#      shared filter chain must see the description, which it does.
+#   2. The corpus is dominated by Monteur / Installateur / Lernende listings and
+#      by staffing agencies reselling one mandate under several names. A 25-row
+#      sample contained zero professional owner-side roles. Expect low yield.
+
+JOBROOM_API = ("https://www.job-room.ch/jobadservice/api/jobAdvertisements/_search"
+               "?page=0&size={size}&sort=date_desc")
+JOBROOM_QUERIES = ["Photovoltaik", "Bauherrenvertretung", "Netzanschluss"]
+JOBROOM_SIZE = 40
+JOBROOM_WORKLOAD_MIN = 80
+
+
+def _jobroom_post(query: str, size: int) -> list[dict]:
+    body = json.dumps({"permanent": True, "keywords": [query]}).encode("utf-8")
+    req = urllib.request.Request(
+        JOBROOM_API.format(size=size),
+        data=body,
+        headers={
+            "User-Agent": UA,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Language": "de-CH,de;q=0.9,fr;q=0.7,en;q=0.6",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        return json.loads(r.read().decode("utf-8", errors="replace"))
+
+
+def scrape_jobroom() -> list[dict]:
+    """arbeit.swiss / job-room.ch public API. One POST per keyword."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for q in JOBROOM_QUERIES:
+        try:
+            records = _jobroom_post(q, JOBROOM_SIZE)
+        except Exception as e:
+            log.warning("[JobRoom] '%s' failed: %s", q, e)
+            continue
+        for rec in records:
+            ad = rec.get("jobAdvertisement") or {}
+            content = ad.get("jobContent") or {}
+            descs = content.get("jobDescriptions") or []
+            if not descs or not ad.get("id"):
+                continue
+            title = _text(descs[0].get("title") or "")
+            if not title:
+                continue
+            url = "https://www.job-room.ch/job-search/" + ad["id"]
+            if url in seen:
+                continue
+            seen.add(url)
+
+            empl = content.get("employment") or {}
+            try:
+                wl_max = int(empl.get("workloadPercentageMax") or 100)
+            except (TypeError, ValueError):
+                wl_max = 100
+            if wl_max < JOBROOM_WORKLOAD_MIN:
+                continue
+
+            loc = content.get("location") or {}
+            city = loc.get("city") or ""
+            canton = loc.get("cantonCode") or ""
+
+            out.append({
+                "company": ((content.get("company") or {}).get("name") or "").strip(),
+                "title": title,
+                "url": url,
+                "location": ", ".join(p for p in (city, canton) if p),
+                "workmode": "",
+                "board": "JobRoom",
+                "_jd_inline": _text(descs[0].get("description") or ""),
+            })
+    log.info("[JobRoom] parsed %d rows across %d queries", len(out), len(JOBROOM_QUERIES))
+    return out
+
+
+# ============================================================================
 # Fachplanung / small independent offices
 # ============================================================================
 
@@ -224,6 +317,7 @@ SCRAPERS: list[tuple[str, Callable[[], list[dict]]]] = [
     ("Swissolar", scrape_swissolar),
     ("JobScout24", scrape_jobscout24),
     ("Fachplanung", scrape_fachplanung),
+    ("JobRoom", scrape_jobroom),
 ]
 
 
@@ -272,11 +366,13 @@ def fetch_swiss_board_jobs(state_path: str = "seen_board_jobs.json") -> list[dic
 
     survivors: list[dict] = []
     for j in candidates:
-        try:
-            jd_body = fetch_jd_body(j["url"])
-        except Exception as e:
-            log.warning("  JD fetch failed for %s: %s", j["title"], e)
-            jd_body = ""
+        jd_body = j.pop("_jd_inline", "")
+        if not jd_body:
+            try:
+                jd_body = fetch_jd_body(j["url"])
+            except Exception as e:
+                log.warning("  JD fetch failed for %s: %s", j["title"], e)
+                jd_body = ""
         if not jd_body:
             log.warning("  EMPTY BODY: %s | %s", j["title"], j["url"])
         j["jd_note"] = (f"{len(jd_body)} chars" if jd_body
