@@ -32,8 +32,8 @@ import urllib.request
 from html import unescape
 from typing import Callable
 
-from job_filters import (apply_filter_chain, fetch_jd_body, is_swiss_location,
-                         german_prescreen_flag)
+from job_filters import (agency_flag, apply_filter_chain, fetch_jd_body,
+                         is_swiss_location, german_prescreen_flag)
 
 log = logging.getLogger(__name__)
 
@@ -182,7 +182,14 @@ def scrape_jobscout24() -> list[dict]:
 
 JOBROOM_API = ("https://www.job-room.ch/jobadservice/api/jobAdvertisements/_search"
                "?page=0&size={size}&sort=date_desc")
-JOBROOM_QUERIES = ["Photovoltaik", "Bauherrenvertretung", "Netzanschluss"]
+# 2026-08-15: three queries returned 86 rows and zero owner-side PV mandates.
+# "Netzanschluss" pulls grid-electrician and utility roles (ewb Auftragsleiter
+# Netzanschluesse, ewl Netzelektriker) and even telecom (Saphir Group Networks).
+# "Bauherrenvertretung" pulls Hochbau owner-representation with no PV content -
+# Drees & Sommer, Fuhr Buser, every cantonal Hochbauamt. Both terms describe the
+# target profile; the intersection with PV is empty here because job-room matches
+# FULL TEXT including employer boilerplate.
+JOBROOM_QUERIES = ["Photovoltaik"]
 JOBROOM_SIZE = 40
 JOBROOM_WORKLOAD_MIN = 80
 
@@ -378,6 +385,7 @@ def fetch_swiss_board_jobs(state_path: str = "seen_board_jobs.json") -> list[dic
         j["jd_note"] = (f"{len(jd_body)} chars" if jd_body
                         else "NOT RETRIEVED - requirements unverified")
         j["lang_note"] = german_prescreen_flag(jd_body)
+        j["agency_note"] = agency_flag(j.get("company", ""), jd_body)
         keep, reason = apply_filter_chain(
             title=j["title"],
             location=j.get("location", ""),

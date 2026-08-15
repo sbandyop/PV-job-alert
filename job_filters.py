@@ -155,23 +155,84 @@ GERMAN_WALL_REJECT_BODY = [r"stilsicher\w*\s+deutsch", r"muttersprache\s*:?\s*de
 # --- Aussendienst + driving licence (criteria 2026-07-21, no Kat. B): reject only when both tokens appear within 200 chars; licence-only mentions stay in scope (rail-reachable). ---
 FIELD_LICENCE_REJECT_BODY = [r"aussendienst.{0,200}f(?:ü|ue)hrer(?:schein|ausweis)", r"f(?:ü|ue)hrer(?:schein|ausweis).{0,200}aussendienst"]
 
-# --- Agency-shell signals: staffing reposts for undisclosed end clients ---
-AGENCY_POSTER_NAMES = [
-    "dasteam", "das team", "addexpert", "excellent go4", "excellent1",
-    "zürcher consulting", "zuercher consulting",
+# --- Driving licence required, independent of Aussendienst ---------------------
+# 2026-08-15: mirrors the EFZ gate. A licence token REJECTS unless an explicit
+# softener sits nearby. Swiss ads state the requirement in profile style with no
+# hard word - "Sie sind im Besitz eines Fuehrerausweises der Kategorie B" is a
+# requirement, not a nice-to-have, and an earlier draft demanding
+# "zwingend"/"erforderlich" let it through.
+#
+# Softeners are a SEPARATE, narrower list than CREDENTIAL_SOFTENERS: the generic
+# "oder" / "bzw." entries used by the EFZ gate appear constantly in ordinary prose
+# and would silently soften almost any licence mention inside a 120-char window.
+# Negations ("nicht zwingend", "kein Muss") count as softeners.
+LICENCE_TOKENS = [
+    r"f(?:\u00fc|ue)hrer(?:schein|ausweis)\w*",
+    r"fahrausweis\w*",
+    r"driv(?:er|ing)(?:'s)?\s+licen[cs]e",
+    r"permis de conduire",
 ]
-# 2026-08-04: "für unsere[nr]? kund" also matched ordinary employer copy
-# ("Wir realisieren für unsere Kunden PV-Anlagen"), which is standard on
-# owner's-engineer, planning and EPC sites — i.e. exactly the target segment.
-# Now the phrase only counts as an agency signal when it sits next to a
-# staffing/mandate word.
-AGENCY_SHELL_PHRASES = [
+LICENCE_SOFTENERS = [
+    r"idealerweise", r"von vorteil", r"vorteilhaft", r"w(?:\u00fc|ue)nschenswert",
+    r"optional", r"bevorzugt", r"gerne", r"wenn m(?:\u00f6|oe)glich",
+    r"kein muss", r"nicht zwingend", r"nicht erforderlich", r"not required",
+    r"nice to have", r"\bplus\b", r"preferab\w*", r"ideally",
+    r"an advantage", r"advantageous", r"desirable", r"an asset",
+]
+LICENCE_WINDOW = 120
+
+# --- Agency-shell signals: staffing reposts for undisclosed end clients ---
+# 2026-08-15: recruiters are NO LONGER rejected by name. Rejection is on the
+# CONTRACT TYPE of the posting, not on who posted it. Two distinct populations
+# were previously conflated: Personalverleih (hourly trade placement) and
+# specialist permanent search (named mandate, percentage fee). The latter withholds
+# the client to protect the fee, not because the role is generic, and it does carry
+# real owner-side roles - the old AGENCY_SHELL_PHRASES hard-reject on
+# "fuer unsere Kunden suchen wir" was silently dropping exactly those.
+SEARCH_CONSULTANCY_NAMES = [
+    "rocken", "darwin", "sr2", "piper maddox", "hunter philips", "mint ",
+    "manpower", "experis", "adecco", "randstad", "hays", "yellowshark",
+    "addexpert", "excellent go4", "excellent1", "mamgo", "yer ",
+    "zürcher consulting", "zuercher consulting", "careerplus", "universal job",
+    "personalverleih", "personaldienstleist", "personalberat", "personalvermittlung",
+    "stellenvermittlung", "fachkraft", "stellentreff", "rent a person",
+    "dasteam", "das team", "futuro personal", "sta personal", "glaus personal",
+    "progress personal", "personal kolin", "job team", "dommen nadig",
+    "ipersonal", "interiman",
+]
+
+# Flag only - standard perm-search copy, never a reject on its own.
+UNDISCLOSED_CLIENT_PHRASES = [
     r"f(ü|ue)r unsere[nrs]?\s+kund\w*\s+(suchen|rekrutieren|besetzen)",
     r"(suchen|rekrutieren|besetzen)\w*\s+wir\s+f(ü|ue)r unsere[nrs]?\s+kund",
     r"im auftrag (von |der |des )?unsere[nrs]?\s+kund",
     r"unser kunde\s+(ist|sucht)",
-    r"personalverleih", r"personalvermittlung", r"verleih von personal",
-    r"temporär|temporaer.{0,20}(einsatz|stelle)",
+]
+
+# HARD REJECT: the POSITION is temporary, fixed-term, apprenticeship or cover.
+# Note the (?<!un) guard - "unbefristet" contains "befristet" and a naive pattern
+# would reject every permanent role. Applied to title and body only, NEVER to the
+# company name: a Temporaerbuero advertising a permanent role is still a permanent
+# role. Also a safety net for job-room, whose API accepts permanent=true yet
+# returned "Solarmonteur/in Photovoltaik (Temporaer)" flagged permanent on 14.08.
+TEMP_CONTRACT_TITLE = [
+    r"\btempor(?:är|aer|ary)\w*", r"\btemp\b",
+    r"(?<!un)befristet\w*", r"\bbefristung\b",
+    r"fixed[\s-]?term", r"\binterim\b", r"\bcdd\b",
+    r"zeitarbeit", r"\baushilfe\w*", r"\bsaison\w*", r"\bferienjob\b",
+    r"praktikum|praktikant\w*|\bintern(?:ship)?\b",
+    r"lehrstelle|lernende\w*|apprentice\w*",
+    r"(mutterschafts|schwangerschafts|eltern|ferien)vertretung",
+    r"maternity\s+cover", r"\bvertretung\s+f(ü|ue)r\b",
+]
+TEMP_CONTRACT_BODY = [
+    r"\btempor(?:är|aer|ary)\w*\s*(?:einsatz|anstellung|stelle|position|basis|assignment)",
+    r"(?<!un)befristet\w*\s*(?:auf|bis|f(ü|ue)r|anstellung|vertrag|arbeitsvertrag)",
+    r"(?:vertrag|anstellung|einsatz)\s+ist\s+(?<!un)befristet",
+    r"fixed[\s-]?term\s+(?:contract|position|role|assignment)",
+    r"\bcontract\s+(?:duration|until|for\s+\d+\s+month)",
+    r"dauer\s+des\s+einsatzes", r"einsatzdauer",
+    r"\bstundenlohn\b",
 ]
 
 # --- Target-region restriction: German-speaking Switzerland (Deutschschweiz) ---
@@ -658,6 +719,19 @@ def _credential_gate_is_hard(body: str) -> tuple[bool, str]:
     return False, "softener present near credential token"
 
 
+def _licence_gate_is_hard(body: str) -> str:
+    """Return the matched licence token when the requirement is NOT softened."""
+    for tok in LICENCE_TOKENS:
+        for m in re.finditer(tok, body):
+            lo = max(0, m.start() - LICENCE_WINDOW)
+            hi = min(len(body), m.end() + LICENCE_WINDOW)
+            window = body[lo:hi]
+            if any(re.search(s, window) for s in LICENCE_SOFTENERS):
+                continue
+            return m.group(0)
+    return ""
+
+
 def passes_requirements_body(jd_body: str) -> tuple[bool, str]:
     """Scan JD body for trade-track gate / Bauleitung / sales-primary.
     Fails OPEN on empty body (no body fetched -> let scoring decide)."""
@@ -675,6 +749,9 @@ def passes_requirements_body(jd_body: str) -> tuple[bool, str]:
         return False, "explicit German language wall (C1/stilsicher/Muttersprache)"
     if _matches_any(FIELD_LICENCE_REJECT_BODY, body):
         return False, "Aussendienst + driving licence required (no Kat. B)"
+    hit = _licence_gate_is_hard(body)
+    if hit:
+        return False, f"driving licence required, not softened ({hit}) - no Kat. B"
     return True, ""
 
 
@@ -700,15 +777,42 @@ def german_prescreen_flag(jd_body: str) -> str:
     return ""
 
 
-def passes_agency_shell(company: str, jd_body: str) -> tuple[bool, str]:
-    """Reject staffing-agency reposts for undisclosed end clients."""
+def passes_permanent_contract(title: str, jd_body: str) -> tuple[bool, str]:
+    """Reject temporary, fixed-term, apprenticeship and cover positions."""
+    t = (title or "").lower()
+    for p in TEMP_CONTRACT_TITLE:
+        m = re.search(p, t)
+        if m:
+            return False, f"temporary/fixed-term position (title: {m.group(0)})"
+    b = (jd_body or "").lower()
+    if b:
+        for p in TEMP_CONTRACT_BODY:
+            m = re.search(p, b)
+            if m:
+                return False, f"temporary/fixed-term position (body: {m.group(0)})"
+    return True, ""
+
+
+def agency_flag(company: str, jd_body: str) -> str:
+    """Note when the poster is an intermediary with no named end client.
+
+    Advisory only, mirroring german_prescreen_flag. Recruiters are never rejected
+    on identity. When the client is not named, `company` carries no information
+    for the transferability and segment-scale gates, so the JD body is the only
+    evidence the role has - and a thin body means a CV-harvesting advert rather
+    than a live mandate.
+    """
     comp = (company or "").lower()
     body = (jd_body or "").lower()
-    if any(name in comp for name in AGENCY_POSTER_NAMES):
-        return False, f"staffing agency poster ({comp})"
-    if body and _matches_any(AGENCY_SHELL_PHRASES, body):
-        return False, "agency shell: undisclosed end client"
-    return True, ""
+    named = any(n in comp for n in SEARCH_CONSULTANCY_NAMES)
+    shell = bool(body) and _matches_any(UNDISCLOSED_CLIENT_PHRASES, body)
+    if not (named or shell):
+        return ""
+    note = "AGENCY - end client not named; score on the JD alone, company is not evidence"
+    if len(body) < 900:
+        note += "; THIN BODY - possible CV harvesting rather than a live mandate"
+    note += "; 3-4 weeks silence = withdraw per AGENCY-SILENCE RULE, no cooldown entry"
+    return note
 
 
 def passes_target_location(location: str) -> tuple[bool, str]:
@@ -762,8 +866,9 @@ def apply_filter_chain(
     if not ok:
         return False, reason
 
-    # Agency-shell reject (uses company name + body phrasing)
-    ok, reason = passes_agency_shell(company, jd_body)
+    # Contract-type reject: temporary/fixed-term/apprenticeship/cover positions.
+    # Recruiters are NOT rejected on identity - see agency_flag().
+    ok, reason = passes_permanent_contract(title, jd_body)
     if not ok:
         return False, reason
 

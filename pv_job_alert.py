@@ -24,7 +24,7 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from urllib.parse import urlparse
 
-from job_filters import (apply_filter_chain, fetch_jd_body, resolve_final_url,
+from job_filters import (agency_flag, apply_filter_chain, fetch_jd_body, resolve_final_url,
                          german_prescreen_flag)
 from swiss_employers import fetch_swiss_employer_jobs
 from swiss_boards import fetch_swiss_board_jobs
@@ -283,6 +283,7 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
         else:
             jd_note = f"{len(jd_body)} chars from {_h}"
         lang_note = german_prescreen_flag(jd_body)
+        agency_note = agency_flag(j.get("company", ""), jd_body)
 
         keep, reason = apply_filter_chain(
             title=title, location=loc, jd_body=jd_body,
@@ -307,6 +308,7 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
                 "title": title, "company": company, "location": loc,
                 "score": score, "key_match": key_match, "key_gap": key_gap,
                 "link": link, "jd_note": jd_note, "lang_note": lang_note,
+                "agency_note": agency_note,
             })
     return matches
 
@@ -363,6 +365,8 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=
             body += f"JD BODY:   {j.get('jd_note', 'n/a')}\n"
             if j.get('lang_note'):
                 body += f"LANGUAGE:  {j['lang_note']}\n"
+            if j.get('agency_note'):
+                body += f"AGENCY:    {j['agency_note']}\n"
             if j['key_gap']:
                 body += f"GAP:       {j['key_gap']}\n"
             body += f"LINK:      {j['link']}\n"
@@ -377,6 +381,8 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=
             body += f"JD BODY:   {j.get('jd_note', 'n/a')}\n"
             if j.get('lang_note'):
                 body += f"LANGUAGE:  {j['lang_note']}\n"
+            if j.get('agency_note'):
+                body += f"AGENCY:    {j['agency_note']}\n"
             body += f"LINK:      {j['url']}\n"
             body += "-" * 40 + "\n\n"
 
@@ -391,6 +397,8 @@ def send_email(adzuna_matches, swiss_matches, expiring_cooldowns, board_matches=
             body += f"JD BODY:   {j.get('jd_note', 'n/a')}\n"
             if j.get('lang_note'):
                 body += f"LANGUAGE:  {j['lang_note']}\n"
+            if j.get('agency_note'):
+                body += f"AGENCY:    {j['agency_note']}\n"
             body += f"SOURCE:    {j.get('source', 'swiss-board')}\n"
             body += f"LINK:      {j['url']}\n"
             body += "-" * 40 + "\n\n"

@@ -16,6 +16,7 @@ from html import unescape
 from typing import Callable
 
 from job_filters import (
+    agency_flag,
     apply_filter_chain,
     fetch_jd_body,
     german_prescreen_flag,
@@ -278,6 +279,7 @@ def fetch_swiss_employer_jobs(state_path: str = "seen_swiss_jobs.json") -> list[
         j["jd_note"] = (f"{len(jd_body)} chars" if jd_body
                         else "NOT RETRIEVED - requirements unverified")
         j["lang_note"] = german_prescreen_flag(jd_body)
+        j["agency_note"] = agency_flag(j.get("company", ""), jd_body)
         if not jd_body:
             log.warning("  EMPTY BODY (extraction failed): %s | %s", j["title"], j["url"])
 
