@@ -283,7 +283,7 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
         else:
             jd_note = f"{len(jd_body)} chars from {_h}"
         lang_note = german_prescreen_flag(jd_body)
-        agency_note = agency_flag(j.get("company", ""), jd_body)
+        agency_note = agency_flag(company, jd_body)
 
         keep, reason = apply_filter_chain(
             title=title, location=loc, jd_body=jd_body,
