@@ -157,6 +157,46 @@ DOMAIN_MISMATCH = [
     r"solarteur",
 ]
 
+# 2026-08-16: TITLE-scoped structural rejects. These encode criteria v9 rules
+# that previously existed only in the review layer, never in the scraper. The
+# 16.08 LinkedIn sweep is what exposed the gap: it emailed five roles that v9
+# rejects outright — Einkauf/AVOR/PPS, Verkauf Innendienst, AC-Montage &
+# Inbetriebnahme, and a Customer Support Engineer. Adzuna's low volume had
+# hidden this; LinkedIn's volume did not.
+#
+# TITLE-SCOPED ON PURPOSE, and this is the whole point of the design.
+# "Einkauf" as one duty inside an owner-side JD is normal and must NOT reject.
+# "Einkauf" in the TITLE is the job itself. Matching these against the body
+# would repeat the failure mode DOMAIN_MISMATCH already has, where a stray
+# "Solarteur" in a team list binned an otherwise owner-side Projektleitung.
+#
+# Deliberately NOT included: "inbetriebnahme" on its own. She witnesses
+# commissioning and signs off acceptance, so an owner-side commissioning title
+# is a legitimate target; only execution-flavoured Montage titles are out, and
+# "AC-Montage & Inbetriebnahme" is already caught by the montage pattern.
+TITLE_REJECTS = [
+    # Narrow-specialist core (rule 2026-07-29, Hitachi lesson)
+    (r"\beinkauf|\bavor\b|\bpps\b|beschaffung|procurement",
+     "narrow specialist: procurement / AVOR core"),
+    (r"kalkulator|kalkulation|angebotsingenieur|bid manager|tender manager|quotation",
+     "narrow specialist: tendering / calculation core"),
+    # Sales anchor (criteria v9 structural reject)
+    (r"verkauf|vertrieb|innendienst|kundenberater|sales (manager|engineer|representative)",
+     "sales anchor"),
+    # Contractor / service core (rule 2026-08-08, addexpert / Inova lesson)
+    (r"montage|servicetechniker|wartung|instandhaltung|field service|customer support engineer",
+     "contractor / service core"),
+]
+
+
+def _title_reject(title):
+    """Structural rejects judged on the TITLE alone. See TITLE_REJECTS."""
+    t = (title or "").lower()
+    for pattern, label in TITLE_REJECTS:
+        if re.search(pattern, t):
+            return label
+    return None
+
 
 def _host(url):
     """Short hostname for the JD-provenance line."""
@@ -173,6 +213,10 @@ def _first_pattern_hit(patterns, text):
 
 def score_job(title, company, description):
     text = (title + " " + description).lower()
+
+    title_hit = _title_reject(title)
+    if title_hit:
+        return 0, "Skip", "Structural reject", f"Structural reject: {title_hit}"
 
     mismatch_hit = _first_pattern_hit(DOMAIN_MISMATCH, text)
     if mismatch_hit:
@@ -315,7 +359,7 @@ def process_adzuna(raw_jobs, cooldowns, seen_ids):
     return matches
 
 
-def filter_swiss_by_cooldown(swiss_jobs, cooldowns):
+def filter_swiss_by_cooldown(swiss_jobs, cooldowns, label="SWISS"):
     """Cooldown filter + domain-relevance gate for Swiss scraper results.
 
     2026-08-11: these paths previously ran cooldown checks ONLY. score_job was
@@ -331,16 +375,16 @@ def filter_swiss_by_cooldown(swiss_jobs, cooldowns):
     kept = []
     for j in swiss_jobs:
         if is_rejected_permanent(j.get("company", "")):
-            print(f"  SWISS SKIP (permanent): {j['company']}")
+            print(f"  {label} SKIP (permanent): {j['company']}")
             continue
         blocked, entry = is_blocked(j.get("company", ""), j.get("title", ""), cooldowns)
         if blocked:
-            print(f"  SWISS SKIP (cooldown until {entry['blocked_until']}): {j['title']}")
+            print(f"  {label} SKIP (cooldown until {entry['blocked_until']}): {j['title']}")
             continue
         score, verdict, _km, key_gap = score_job(
             j.get("title", ""), j.get("company", ""), j.get("jd_body", "") or "")
         if verdict != "Apply":
-            print(f"  SWISS SKIP ({key_gap or 'insufficient PV/PM signal'}): {j['title']}")
+            print(f"  {label} SKIP ({key_gap or 'insufficient PV/PM signal'}): {j['title']}")
             continue
         j["score"] = score
         j.pop("jd_body", None)   # bulky; not needed beyond this point
@@ -504,7 +548,8 @@ def main():
     print("\n--- LINKEDIN VIA APIFY ---")
     try:
         linkedin_raw = fetch_linkedin_jobs(state_path="seen_linkedin_jobs.json")
-        linkedin_matches = filter_swiss_by_cooldown(linkedin_raw, cooldowns)
+        linkedin_matches = filter_swiss_by_cooldown(linkedin_raw, cooldowns,
+                                                    label="LINKEDIN")
     except Exception as e:
         print(f"[WARN] LinkedIn/Apify scrape failed: {e}")
         linkedin_matches = []
